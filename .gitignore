@@ -1,4 +1,14 @@
 # Byte-compiled / optimized / DLL files
+# Personal knowledge (local only)
+/01-secret/**
+!/01-secret/README.md
+/06-storage/*
+!/06-storage/README.md
+/99-trash/*
+!/99-trash/README.md
+.env.*
+!.env.example
+
 __pycache__/
 *.py[codz]
 *$py.class
