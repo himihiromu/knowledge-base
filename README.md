@@ -36,6 +36,8 @@ AIの入口はCodex用の [AGENTS.md](AGENTS.md) とClaude Code用の [CLAUDE.md
 共通の指示は [agents.md](agents.md)、配置・更新の基準は [運用ルール](00-rules/workflow.md)。
 タスクは05で管理し、完了した成果物へリンクする。
 
+別リポジトリの開発は[開発の依頼と進捗](05-todo/development/README.md)を入口にする。[開発先情報](05-todo/development/repositories/README.md)を登録し、開発で得た知見は[開発の知見](02-knowledge/development/README.md)へまとめる。
+
 ## ローカルに保存する内容
 
 01・06・99は案内用READMEのみGitで管理し、それ以外の内容は追跡対象外にする。
