@@ -97,3 +97,10 @@ bash、GNU coreutils（`mktemp`、`mkdir`、`rm`、`sha256sum`、`wc`、`cp`、`
 ### 変更対象
 
 なし。`--root` に `mktemp` の一時ディレクトリを渡すため、リポジトリの実物は書き換えない。一時ディレクトリは終了時に削除する。
+
+## check-knowledge-diff.mjs
+
+- 目的: commit前に、ステージ済み差分（`git diff --cached`）の本文へ混ざった日付・時刻・経緯を示唆する語を検出して報告する。検出手順と候補の判定は[commit前ナレッジ検査](../agents/skills/validate-committed-knowledge/SKILL.md)に従う。
+- 実行方法: `node scripts/check-knowledge-diff.mjs [パス...]`。引数で差分のパスを絞り込める。`01-secret/`・`06-storage/`・`99-trash/`・`.takt/` 配下は常に除外する。終了コードは 0=検出なし、1=検出あり、2=実行環境エラー。
+- 依存ツール: Node.js、git。外部パッケージは使わない。読み取り専用で、ファイル・作業ツリー・ステージを変更しない。
+- 変更対象: なし（標準出力と標準エラー出力への報告のみ）。テストは `node --test scripts/test/check-knowledge-diff.test.mjs`。
