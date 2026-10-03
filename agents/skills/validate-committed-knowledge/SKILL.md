@@ -11,6 +11,8 @@ commitする前に、ステージ済みのナレッジ差分へ本文として�
 
 検出されても必ずしも問題ではない。判定はこの手順に従い、スクリプトは候補の列挙のみを行う。
 
+リンク切れ・orphan・重複・矛盾・必須メタデータなど、commit後のナレッジ全体を機械で判定できる品質検査は `scripts/check-knowledge-quality.mjs` が担い、CI（`.github/workflows/knowledge-quality.yml`）で実行される。この手順は差分に特化した確認であり、機械検査との分担の詳細は[scripts/README.md](../../../scripts/README.md)に記録してある。
+
 ## 使う場面
 
 `git add` の後、commitの前。[運用ルール](../../../00-rules/workflow.md)の「Gitに保存する前に差分を確認し」の確認の一部として実施する。
