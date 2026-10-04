@@ -25,7 +25,7 @@ scripts/save-ai-prompt.sh --title "タイトル" --takeaway "抜き出した方�
 
 ### 依存ツール
 
-bash、GNU coreutils（`date`、`tr`、`dirname`、`mkdir`、`mktemp`、`cat`、`mv`、`rm`）、sed、grep。
+bash、GNU coreutils（`date`、`tr`、`dirname`、`mkdir`、`mktemp`、`cat`、`mv`、`rm`）、sed、grep、util-linux（`flock`）。`flock` が無い場合は保存せずに非ゼロで終了する。
 
 ### 入力
 
@@ -73,14 +73,19 @@ bash、GNU coreutils（`date`、`tr`、`dirname`、`mkdir`、`mktemp`、`cat`、
 
 - タイトル・方針・本文の不足、日付形式の不正、`--file` の不在、同じ日付とタイトルの記録が既にある場合は、使い方を標準エラーへ出して非ゼロで終了する。
 - 入力検証エラー・既存記録との衝突時は、既存の記録と集約を変更せず、新しい記録ファイルも残さない。
-- 記録の保存と集約への追記は順番に行う。集約先の権限不足や容量不足などで追記が失敗した場合、記録ファイルだけが残ることがある。再実行前に保存結果を確認する。
-- 同時実行の排他制御は行わない。同じ出力ルートへの保存は1件ずつ実行する。
+- 記録と集約は、どちらも一時ファイルへ組み立ててから `mv` で入れ替える。集約の組み立てや入れ替えに失敗した場合は記録を取り消すため、失敗した保存が記録だけ・集約だけの中途半端な状態を残すことはない。記録の入れ替えの後・集約の入れ替えの前で SIGINT・SIGTERM・SIGHUP の中断や失敗で終わった場合も、入れ替えた記録は取り消される（SIGKILL 等の対処できない終端を除く）。集約の失敗は標準エラーへ出して非ゼロで終了する。保存途中の失敗の後は、同じ保存先への再実行で記録と集約が揃う（SIGKILL が記録の入れ替えの後・集約の入れ替えの前に着弾した場合は除く。SIGKILL の場合の回復手順に従う）。
+- 保存は `04-materials/prompts/` のディレクトリを `flock` で排他してから行う。同じ出力ルートへの並列実行でも集約の追記が欠落・重複しない。衝突の判定もこの排他の内側で行うため、同じ日付とタイトルの保存が並列でも1件だけ成功する。ロックが30秒間取れない場合は非ゼロで終了する。
+- SIGINT・SIGTERM・SIGHUP でも一時ファイルを掃除して終了する。SIGKILL では掃除できないため、記録や集約の一時ファイル（`.save-ai-prompt-*`）が残ることがある。その場合は残った一時ファイルを削除してから保存をやり直す。SIGKILL が記録の入れ替えの後・集約の入れ替えの前に着弾した場合は、入れ替え済みの記録ファイル本体（`04-materials/prompts/YYYY-MM-DD-タイトル.md`。`.save-ai-prompt-*` には一致しない）も集約側の一時ファイル（`.save-ai-prompt-aggregate-*`）と同様に残るため、その記録も削除してから保存をやり直す。記録を削除しない再実行は、既存の記録との衝突として拒否されて非ゼロで終了する。
+
+### 登録スクリプトとの排他
+
+`register-ai-prompt.sh` は通常保存時に同じ `04-materials/prompts/` ディレクトリを `flock` する。両スクリプトはロック内で保存先の衝突を確認するため、片方が書き込み中にもう片方が同じ日付・タイトルを登録して上書きすることはない。登録側の排他・再実行・失敗時の一時ファイル掃除は `register-ai-prompt-test.sh` でも確認する。`--secret` の登録は `01-secret/prompts/` を別にロックし、通常保存とは独立している。
 
 ## save-ai-prompt-test.sh — 保存スクリプトの確認
 
 ### 目的
 
-save-ai-prompt.sh の正常系と、データを壊さない異常系（衝突拒否・入力不足・逐語保存・集約の追記保持）を確認するスイート。フレームワークを使わず bash だけで動く。
+save-ai-prompt.sh の正常系、保存途中の失敗・中断・再実行、同じ保存先への並列書き込みを一時ディレクトリで確認するスイート。フレームワークを使わず bash だけで動く。
 
 ### 実行方法
 
@@ -92,7 +97,7 @@ bash scripts/save-ai-prompt-test.sh
 
 ### 依存ツール
 
-bash、GNU coreutils（`mktemp`、`mkdir`、`rm`、`sha256sum`、`wc`、`cp`、`tail`、`head`）、diffutils（`cmp`）、grep、findutils（`find`）、sed。
+bash、GNU coreutils（`mktemp`、`mkdir`、`rm`、`sha256sum`、`wc`、`cp`、`tail`、`head`、`sleep`）、diffutils（`cmp`）、grep、findutils（`find`）、sed、util-linux（`flock`）。
 
 ### 変更対象
 
@@ -116,7 +121,7 @@ bash、GNU coreutils（`mktemp`、`mkdir`、`rm`、`sha256sum`、`wc`、`cp`、`
 
 ### 取得スクリプトとの受け渡し契約
 
-プロンプトの取得スクリプト（Claude・Codexからプロンプトを取得する処理）は未整備で、このリポジトリには存在しない（[05-todo](../05-todo/README.md) の別項目）。このため、取得側とこのスクリプトの受け渡しは次の契約で行う。
+プロンプトの取得スクリプト（[fetch-ai-prompts.mjs](fetch-ai-prompts.mjs)）との受け渡しは次の契約で行う。
 
 - 取得側は、1件のプロンプトにつき1回このスクリプトを呼び出す。本文はファイルまたは標準入力で渡す。
 - 取得側が決めて渡す入力: プロンプトの原文（本文）、取得元（`--source`）、タイトル（`--title`）、取得日（`--date`、省略時は当日）、機密区分（`--secret` の有無）。
@@ -125,7 +130,7 @@ bash、GNU coreutils（`mktemp`、`mkdir`、`rm`、`sha256sum`、`wc`、`cp`、`
 
 ### 取得から登録までの手順
 
-1. Claude・Codexからプロンプトの原文と取得元を確認する（取得スクリプト未整備のため、現状は人間またはAIが各ツールから直接確認する）。
+1. `fetch-ai-prompts.mjs` でClaude・Codexからプロンプトの原文と取得元を確認する。
 2. 原文をファイルへ保存するか、標準入力で渡せるようにする。本文は変換せず、そのままの形で渡す。
 3. 原文に機密情報が含まれるかを判断し、含む場合は `--secret` を付ける。判断に迷う場合は01へ保存する（READMEの機密性の配置ルールに従う）。
 4. `--title` と `--source` を添えてスクリプトを実行する。
@@ -143,7 +148,7 @@ scripts/register-ai-prompt.sh --title "タイトル" --source "claude" [--secret
 
 ### 依存ツール
 
-bash、GNU coreutils（`date`、`tr`、`dirname`、`mkdir`、`mktemp`、`cat`、`mv`、`rm`）、sed、grep。
+bash、GNU coreutils（`date`、`tr`、`dirname`、`mkdir`、`mktemp`、`cat`、`mv`、`rm`）、sed、grep、util-linux（`flock`）。
 
 ### 入力
 
@@ -190,13 +195,15 @@ bash、GNU coreutils（`date`、`tr`、`dirname`、`mkdir`、`mktemp`、`cat`、
 - タイトル・取得元・本文の不足、日付形式の不正、`--file` の不在、同じ日付とタイトルの記録が同じ保存先に既にある場合は、使い方を標準エラーへ出して非ゼロで終了する。
 - 入力検証エラー・既存記録との衝突時は、既存の記録を変更せず、新しい記録ファイルも残さない。
 - 保存先の権限不足や容量不足で保存が失敗した場合、記録ファイルは残らない。再実行前に保存結果を確認する。
-- 同時実行の排他制御は行わない。同じ出力ルートへの登録は1件ずつ実行する。排他制御・atomic／idempotent化は[TODO](../05-todo/README.md)の別項目である。
+- 記録は保存先と同じディレクトリ内の一時ファイルに組み立ててから `mv` で置き換える。書き込みまたは置き換えに失敗した場合、一時ファイルを掃除し、記録を残さず非ゼロで終了する。
+- `04-materials/prompts/` または `01-secret/prompts/` のディレクトリを `flock` で排他する。通常保存は `save-ai-prompt.sh` と同じディレクトリをロックする。ロックが30秒間取れない場合は非ゼロで終了する。
+- SIGINT・SIGTERM・SIGHUP で一時ファイルを掃除する。SIGKILLでは掃除できないことがあるため、再実行前に `.register-ai-prompt-*` の残留を確認する。置き換え済みの記録は上書きせず、同一日付・タイトルの再登録を拒否する。
 
 ## register-ai-prompt-test.sh — 登録スクリプトの確認
 
 ### 目的
 
-register-ai-prompt.sh の正常系（04経路・01経路・`--file` 入口・逐語保存・04と01の共存）と、データを壊さない異常系（両保存先の衝突拒否・入力不足・保存先外への書き込み不在）を確認するスイート。フレームワークを使わず bash だけで動く。
+register-ai-prompt.sh の正常系と入力エラー、保存途中の失敗・再実行、同じ保存先への並列登録、および save-ai-prompt.sh との同名競合を一時ディレクトリで確認するスイート。フレームワークを使わず bash だけで動く。
 
 ### 実行方法
 
@@ -208,7 +215,7 @@ bash scripts/register-ai-prompt-test.sh
 
 ### 依存ツール
 
-bash、GNU coreutils（`mktemp`、`mkdir`、`rm`、`sha256sum`、`wc`、`tail`、`head`、`cat`）、diffutils（`cmp`）、grep、findutils（`find`）。
+bash、GNU coreutils（`mktemp`、`mkdir`、`rm`、`sha256sum`、`wc`、`tail`、`head`、`cat`、`sleep`）、diffutils（`cmp`）、grep、findutils（`find`）、util-linux（`flock`）。
 
 ### 変更対象
 

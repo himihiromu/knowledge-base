@@ -23,7 +23,7 @@
   - 確認日・出典: 2026-10-01のユーザー発言。Claude・Codexから取得したプロンプトをこのリポジトリへ格納する依頼
   - 成果物: [register-ai-prompt.sh](../scripts/register-ai-prompt.sh)（[入力・出力・保存形式の記録](../scripts/README.md)）
 
-- [ ] **プロンプト保存・登録処理のatomic／idempotent化と排他制御**
+- [x] **プロンプト保存・登録処理のatomic／idempotent化と排他制御**（完了: 2026-10-04）
   - 保存途中で失敗しても原文の記録とナレッジ集約が中途半端にならないようにし、再実行時の二重登録と並列書き込みを防ぐ
   - 既存の保存スクリプトと登録スクリプトの両方へ適用し、障害・再実行・並列の確認を行う
   - 成果物: [save-ai-prompt.sh](../scripts/save-ai-prompt.sh)・[register-ai-prompt.sh](../scripts/register-ai-prompt.sh)
