@@ -7,3 +7,5 @@ AIとのプロンプトの記録は[prompts](prompts/README.md)へ。
 大容量の実体は[06-storage](../06-storage/README.md)に置き、ここから参照する。
 
 - [ナレッジベース作成のきっかけ](2026-09-29-personal-knowledge-base.md)
+
+- [開発の元記録](development/README.md)

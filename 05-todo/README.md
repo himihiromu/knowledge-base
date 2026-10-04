@@ -4,6 +4,8 @@
 [プロジェクトの雛形](../00-rules/templates/project.md)を利用できる。
 完了したら状態を更新し、[03-output](../03-output/README.md)の成果物や[02-knowledge](../02-knowledge/README.md)の学びへリンクする。
 
+別リポジトリの開発先情報・依頼・進捗は[開発の依頼と進捗](development/README.md)で管理する。
+
 ## スクリプト
 
 - [x] **AIとのプロンプトを保存するスクリプトの追加**（完了: 2026-09-30）
