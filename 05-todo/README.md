@@ -1,82 +1,44 @@
 # TODO
 
-仕事・生活のタスクとプロジェクトの目的、完了条件、進捗、次の行動を記録する。
-[プロジェクトの雛形](../00-rules/templates/project.md)を利用できる。
-完了したら状態を更新し、[03-output](../03-output/README.md)の成果物や[02-knowledge](../02-knowledge/README.md)の学びへリンクする。
+仕事・生活のタスクは、原則として1タスクにつき1ファイルで管理する。個別の目的・完了条件・進捗・成果物を各タスクファイルに記録し、このREADMEは入口と一覧として使う。
 
-別リポジトリの開発先情報・依頼・進捗は[開発の依頼と進捗](development/README.md)で管理する。
+## タスクの作成・更新
 
-## スクリプト
+1. [タスク雛形](../00-rules/templates/todo-task.md)を `tasks/<テーマ>.md` へコピーする。
+2. タイトル、状態、確認日、出典、目的、完了条件、次の行動を記入する。出典が会話の場合は日付と要旨を書く。
+3. 進捗・成果物・検証結果をそのタスクファイルへ記録し、完了したら状態を「完了」にして成果物や知見へリンクする。
+4. この一覧には未完了のタスクをリンクする。完了タスクの経緯は個別ファイルに残し、一覧からは完了セクションへ移す。
 
-- [x] **AIとのプロンプトを保存するスクリプトの追加**（完了: 2026-09-30）
-  - AI作業への指摘から、私の好みや方針を抜き出す
-  - 抜き出した内容をナレッジ化し、後続作業で活用できるようにする
-  - 成果物: [save-ai-prompt.sh](../scripts/save-ai-prompt.sh)（[入力・出力・保存形式の記録](../scripts/README.md)）
+別リポジトリの開発タスクは、開発先情報や専用の検証項目を含むため、引き続き[開発タスク管理](development/README.md)で個別ファイルとして管理する。TAKTの実行・復旧記録は[タスクの再開準備](takt-recovery.md)を参照する。
 
-- [x] **Claude・Codexからプロンプトを取得するスクリプトの作成**（完了: 2026-10-03）
-  - Claude・Codexからプロンプト情報を取得する
-  - 取得元・取得方法を確認し、登録スクリプトに渡す出力形式を定義する
-  - 成果物: [fetch-ai-prompts.mjs](../scripts/fetch-ai-prompts.mjs)（[取得元・受け渡し形式の記録](../scripts/README.md)）
+## 未完了タスク
 
-- [x] **取得したプロンプトをこのリポジトリへ登録するスクリプトの作成**（完了: 2026-10-03）
-  - 上記の取得スクリプトの出力を受け取り、プロンプト原文と出典をこのリポジトリに格納する
-  - 既存の保存スクリプトとの役割・再利用範囲を確認し、取得から登録までの利用手順を記録する
-  - 保存先は既存の配置規則に従い、通常の原文は04、機密情報は01として扱う
-  - 確認日・出典: 2026-10-01のユーザー発言。Claude・Codexから取得したプロンプトをこのリポジトリへ格納する依頼
-  - 成果物: [register-ai-prompt.sh](../scripts/register-ai-prompt.sh)（[入力・出力・保存形式の記録](../scripts/README.md)）
+### このリポジトリの成果物・検証ルール
 
-- [x] **プロンプト保存・登録処理のatomic／idempotent化と排他制御**（完了: 2026-10-04）
-  - 保存途中で失敗しても原文の記録とナレッジ集約が中途半端にならないようにし、再実行時の二重登録と並列書き込みを防ぐ
-  - 既存の保存スクリプトと登録スクリプトの両方へ適用し、障害・再実行・並列の確認を行う
-  - 成果物: [save-ai-prompt.sh](../scripts/save-ai-prompt.sh)・[register-ai-prompt.sh](../scripts/register-ai-prompt.sh)
+- [ ] [タスク成果物の配置・構造ルールを整備する](tasks/artifact-structure-rules.md)
+- [ ] [テストの配置・命名・一括実行方法を統一する](tasks/test-conventions.md)
+- [ ] [スキルの機械テストと評価ケースの境界を明確にする](tasks/skill-evaluation-structure.md)
+- [ ] [既存スキル文書とTODOの状態・記載を整合させる](tasks/skill-docs-and-status.md)
+- [ ] [AIとのプロンプトの傾向分析スキルを追加する](tasks/prompt-trend-analysis.md)
 
-## ナレッジの活用・ライフサイクル
+### ナレッジ運用
 
-- [x] **作業に関連するナレッジを絞り込む仕組みの作成**（完了: 2026-10-03）
-  - 作業内容に応じて参照するナレッジを絞り込めるようにする
-  - 絞り込みの入力・選択基準・参照方法を定義する
-  - 成果物: [作業に関連するナレッジの絞り込み](../agents/skills/filter-related-knowledge/SKILL.md)
+- [ ] [プロンプト内容のナレッジ化手順を定義する](tasks/prompt-knowledge-skill.md)
+- [ ] [コミット前ナレッジ検査スキルを整備する](tasks/committed-knowledge-skill.md)
 
-- [x] **Observation → Knowledge → Ruleの昇格条件の定義**（完了: 2026-10-03）
-  - 1回の指摘はobservation、複数回確認した内容はknowledge、明示的に常時守らせたい内容はruleとして扱うライフサイクルを定義する
-  - 各段階の確認方法・出典・保存先を、既存の04→02の整理と00の運用ルールに対応付ける
-  - 「傾向が見えるまで変更しない」という原因特定・変更箇所判断スキルの方針と整合させる
-  - 成果物: [Observation → Knowledge → Ruleのライフサイクル判断](../agents/skills/knowledge-lifecycle/SKILL.md)
+## 完了タスク
 
-## スキル
+- [1タスク1ファイルの管理方法へ移行する](tasks/per-task-todo-management.md)
+- [AIとのプロンプトを保存するスクリプト](tasks/save-ai-prompt.md)
+- [Claude・Codexからプロンプトを取得するスクリプト](tasks/fetch-ai-prompts.md)
+- [取得したプロンプトを登録するスクリプト](tasks/register-ai-prompt.md)
+- [プロンプト保存・登録処理のatomic化と排他制御](tasks/atomic-prompt-storage.md)
+- [作業に関連するナレッジの絞り込み](tasks/filter-related-knowledge.md)
+- [Observation → Knowledge → Ruleの昇格条件](tasks/knowledge-lifecycle.md)
+- [機械判定可能なナレッジ品質検証をCIへ分離](tasks/knowledge-quality-ci.md)
+- [作業修正時の原因特定・変更箇所判断スキル](tasks/correction-analysis-skill.md)
+- [スキル評価用テスト機構](tasks/skill-evaluation.md)
 
-- [ ] **プロンプト内容のナレッジ化スキルの追加**
-  - 上記スクリプトで拾ったプロンプト内容を精査する
-  - ナレッジ化するまでの一連の流れをスキルとして定義する
+## 別リポジトリの開発
 
-- [ ] **commitされるナレッジ情報の検証スキルの追加**
-  - commitされるナレッジ情報に背景・経緯・日時等が含まれていないかを確認する
-  - スクリプトの方が相性が良ければスクリプト化も検討する
-
-- [x] **作業修正時の原因特定・変更箇所判断スキルの追加**（完了: 2026-09-30）
-  - 作業の修正時に原因を特定し、既存ルールやナレッジのどこに変更を掛けるべきかを判断する
-  - スクリプト化できないものについては、指摘事項の傾向が見えるまで変更しない
-  - 複数回分の指摘の保存と傾向分析までをスキルに含める
-  - 成果物: [原因特定・変更箇所判断スキル](../agents/skills/correction-analysis/SKILL.md)
-
-## ナレッジ品質検証
-
-- [x] **機械判定可能なナレッジ品質検証をCIへ分離する**（完了: 2026-10-03）
-  - 出典リンク切れ、orphan knowledge、重複、矛盾、必須メタデータ不足、Markdown・リンクのlintを検査する
-  - 機械で確定できる違反と、人の判断が必要な候補を区別する
-  - 成果物: [check-knowledge-quality.mjs](../scripts/check-knowledge-quality.mjs)（[判定基準の記録](../scripts/README.md)・[品質検査のCI](../.github/workflows/knowledge-quality.yml)）
-
-## スキル評価
-
-- [x] **スキル評価用テスト機構の作成**（完了: 2026-10-04）
-  - 前回までと今回のスキル修正でどう成果が変わるかを確認できる仕組みが欲しい
-  - テストのような評価機構として設計する
-  - 成果物: [スキル評価手順](../agents/skills/skill-evaluation/SKILL.md)（[ケースと記録](../03-output/skill-evaluation/README.md)）
-
-## 確認事項・出典
-
-- `04_refs/` と `03_outputs/` は依頼文の表記。実装時に既存の `04-materials/`・`03-output/` をそのまま使うことを確認した（2026-09-30）。
-- 確認日・出典: 2026-10-01のユーザー発言。ChatGPTから提案された、関連ナレッジの絞り込みをTODOへ追加する依頼。
-- 確認日・出典: 2026-10-01のユーザー発言。ChatGPTから提案されたTODOのうち「Observation → Knowledge → Ruleの昇格条件の定義」を追加する依頼。共有文中の「GitHub」はURLが提示されていないため、外部資料の内容は未確認。
-- 確認日: 2026-09-29
-- 出典: 2026-09-29のユーザー発言。プロンプト保存・ナレッジ化、検証・修正判断のスキル、開発作業環境、スキル評価機構の7件をTODOとして追加する依頼。
+- 開発先情報・依頼・進捗: [開発タスク管理](development/README.md)
