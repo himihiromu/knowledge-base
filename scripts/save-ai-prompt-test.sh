@@ -3,6 +3,7 @@
 # 対象スクリプトの入力・出力・保存形式は scripts/README.md に記録する。
 # --root を一時ディレクトリへ渡すため、リポジトリ実物の 04-materials と 02-knowledge は書き換えない。
 # 日付は再現性のため --date で常に明示し、当日日付の省略経路は観測しない。
+# SCN-F1/F2/F3/P1/P2 は障害・並列のシナリオ。SCN-F1 の失敗注入は集約先の書き込み権限を落として行うため、root では実行せずスキップする。
 set -uo pipefail
 
 SCRIPT_DIR=$(cd "$(dirname "$0")" && pwd)
@@ -24,6 +25,7 @@ trap 'rm -rf "$tmp_base"' EXIT
 case_name=-
 pass_count=0
 fail_count=0
+skip_count=0
 # run_save はパイプライン要素としてサブシェルで実行されるため、終了コードは変数ではなくファイル経由で親へ渡す
 SAVE_STATUS_FILE="$tmp_base/last-status.txt"
 : > "$SAVE_STATUS_FILE"
@@ -42,6 +44,11 @@ pass() {
 fail() {
   fail_count=$((fail_count + 1))
   printf 'ng  [%s] %s\n' "$case_name" "$1" >&2
+}
+
+skip() {
+  skip_count=$((skip_count + 1))
+  printf 'skip[%s] %s\n' "$case_name" "$1" >&2
 }
 
 run_save() {
@@ -170,6 +177,75 @@ expect_file_grew() {
   local desc="$1" before_file="$2" after_file="$3"
   if [ "$(wc -c < "$after_file")" -le "$(wc -c < "$before_file")" ]; then
     fail "$desc: 追記されていない"
+    return 1
+  fi
+  return 0
+}
+
+# 並列実行では結果を共有ファイルへ書く run_save を使えないため、プロセスごとのファイルへ出力する
+launch_save() {
+  local prefix="$1"
+  shift
+  "$TARGET" "$@" >"$prefix.out" 2>"$prefix.err" &
+  printf '%s\n' "$!" >"$prefix.pid"
+}
+
+wait_save() {
+  local prefix="$1" pid
+  pid=$(cat "$prefix.pid")
+  wait "$pid"
+  printf '%s\n' "$?" >"$prefix.status"
+}
+
+# 起動済みの保存について終了コード 0 の件数を数える。失敗時は各プロセスの標準エラー先頭行を併記する
+expect_parallel_success() {
+  local desc="$1" expected="$2" prefix status ok=0 failures=
+  shift 2
+  for prefix in "$@"; do
+    status=$(cat "$prefix.status")
+    if [ "$status" -eq 0 ]; then
+      ok=$((ok + 1))
+    else
+      failures="$failures [終了 $status] $(head -n 1 "$prefix.err")"
+    fi
+  done
+  if [ "$ok" -ne "$expected" ]; then
+    fail "$desc: 成功 $ok 件（期待 $expected）。$failures"
+    return 1
+  fi
+  return 0
+}
+
+expect_file_count() {
+  local desc="$1" dir="$2" expected="$3" actual
+  actual=$(find "$dir" -type f | wc -l)
+  if [ "$actual" -ne "$expected" ]; then
+    fail "$desc: ファイル数は $actual（期待 $expected）: $(find "$dir" -type f | tr '\n' ' ')"
+    return 1
+  fi
+  return 0
+}
+
+# 中断・並列のシナリオでは対象プロセスの進行を直接見れないため、合図のファイルの出現で進行を待つ。固定 sleep を使うと遅い環境で取りこぼす
+wait_for_file() {
+  local desc="$1" path="$2" waited=0
+  while [ ! -e "$path" ]; do
+    if [ "$waited" -ge 100 ]; then
+      fail "$desc: 合図のファイルが待ち上限を過ぎても現れない: $path"
+      return 1
+    fi
+    sleep 0.1
+    waited=$((waited + 1))
+  done
+  return 0
+}
+
+# launch_save で起きた保存の終了コードは wait_save がプロセスごとの .status へ書くため、run_save が更新する共有のステータスファイルとは別に読む
+expect_launch_failure() {
+  local desc="$1" prefix="$2" status
+  status=$(cat "$prefix.status")
+  if [ "$status" -eq 0 ]; then
+    fail "$desc: 終了コードが 0（期待 非0）"
     return 1
   fi
   return 0
@@ -370,6 +446,171 @@ test_c5_e() {
   pass
 }
 
+test_f1() {
+  begin 'SCN-F1 保存途中の失敗で記録と集約が片方だけ残らず、同一の保存先での再実行で両方が揃う'
+  local root record aggregate
+  root=$(new_root 'f1')
+  record="$root/04-materials/prompts/2026-10-02-失敗からの再実行.md"
+  aggregate="$root/02-knowledge/ai-work-preferences.md"
+  if [ "$(id -u)" -eq 0 ]; then
+    skip 'root では集約先の書き込み権限を落とせないため失敗を注入できない'
+    return 0
+  fi
+  mkdir -p "$root/02-knowledge"
+  chmod 555 "$root/02-knowledge"
+  printf '%s\n' '失敗しても記録と集約が中途半端にならないこと' | run_save --root "$root" --date 2026-10-02 --title '失敗からの再実行' --takeaway '保存は記録と集約が揃って完了する'
+  chmod 755 "$root/02-knowledge"
+  expect_failure '集約への書き込みが失敗する保存' || return 0
+  expect_empty_root '失敗後に記録・集約・一時ファイルを残さない' "$root" || return 0
+  printf '%s\n' '失敗しても記録と集約が中途半端にならないこと' | run_save --root "$root" --date 2026-10-02 --title '失敗からの再実行' --takeaway '保存は記録と集約が揃って完了する'
+  expect_success '回復後の同一保存先での再実行' || return 0
+  expect_file '再実行で記録が作成される' "$record" || return 0
+  expect_file '再実行で集約が作成される' "$aggregate" || return 0
+  expect_count_in_file '集約のエントリは1件だけ' "$aggregate" '出典: [2026-10-02-失敗からの再実行.md](../04-materials/prompts/2026-10-02-失敗からの再実行.md)' 1 || return 0
+  expect_file_count '保存先に残るのは記録と集約だけ' "$root" 2 || return 0
+  pass
+}
+
+# SCN-F2 は scripts/README.md の「SIGINT・SIGTERM・SIGHUP でも一時ファイルを掃除して終了する」を、ロック待ちという実在の終端で確認する。
+# ホルダの sleep は有限にし、中断はトラップの規則上前台の flock の終了後へ流れるため、ロック解放で必ず有限時間で終わる
+test_f2() {
+  begin 'SCN-F2 待機中の保存を中断すると一時ファイルを残さず非ゼロで終わり、回復後の同一保存先での再実行で記録と集約が揃う'
+  local root prompts_dir record aggregate body holder_pid
+  root=$(new_root 'f2')
+  prompts_dir="$root/04-materials/prompts"
+  record="$prompts_dir/2026-10-02-待機中の中断.md"
+  aggregate="$root/02-knowledge/ai-work-preferences.md"
+  body="$tmp_base/f2-body.txt"
+  printf '%s\n' '待機中に中断しても記録と集約が中途半端にならないこと' > "$body"
+  mkdir -p "$prompts_dir"
+  ( exec 9<"$prompts_dir"; flock 9 && : > "$tmp_base/f2-lock-held" && sleep 5 ) &
+  holder_pid=$!
+  if ! wait_for_file 'ロック保持の合図' "$tmp_base/f2-lock-held"; then
+    kill "$holder_pid" 2>/dev/null
+    wait "$holder_pid" 2>/dev/null
+    return 0
+  fi
+  launch_save "$tmp_base/f2-save" --root "$root" --date 2026-10-02 --title '待機中の中断' --takeaway '保存は記録と集約が揃って完了する' --file "$body"
+  if ! wait_for_file '保存がロック待ちへ到達した合図' "$root/02-knowledge"; then
+    kill "$(cat "$tmp_base/f2-save.pid")" 2>/dev/null
+    kill "$holder_pid" 2>/dev/null
+    wait "$holder_pid" 2>/dev/null
+    return 0
+  fi
+  kill -TERM "$(cat "$tmp_base/f2-save.pid")"
+  wait_save "$tmp_base/f2-save"
+  kill "$holder_pid" 2>/dev/null
+  wait "$holder_pid" 2>/dev/null
+  expect_launch_failure '待機中の中断は非ゼロで終わる' "$tmp_base/f2-save" || return 0
+  expect_empty_root '中断後に記録・集約・一時ファイルを残さない' "$root" || return 0
+  printf '%s\n' '待機中に中断しても記録と集約が中途半端にならないこと' | run_save --root "$root" --date 2026-10-02 --title '待機中の中断' --takeaway '保存は記録と集約が揃って完了する' --file "$body"
+  expect_success '回復後の同一保存先での再実行' || return 0
+  expect_file '再実行で記録が作成される' "$record" || return 0
+  expect_file '再実行で集約が作成される' "$aggregate" || return 0
+  expect_count_in_file '集約のエントリは1件だけ' "$aggregate" '出典: [2026-10-02-待機中の中断.md](../04-materials/prompts/2026-10-02-待機中の中断.md)' 1 || return 0
+  expect_file_count '保存先に残るのは記録と集約だけ' "$root" 2 || return 0
+  pass
+}
+
+# SCN-F3 は「記録の mv の後・集約の mv の前」という窓での中断を確認する。bash はトラップを前台コマンドの終了まで遅らせるため、
+# 本物の mv を実行してから一旦止まる mv のラッパーを PATH の先頭へ置き、実在する窓を観測できる長さに広げる。移動自体は本物の mv が行う
+test_f3() {
+  begin 'SCN-F3 記録の入れ替え後・集約の入れ替え前の中断で記録だけを残さない'
+  local root record aggregate body shim_dir real_mv marker saved_path
+  root=$(new_root 'f3')
+  record="$root/04-materials/prompts/2026-10-02-入れ替え途中の中断.md"
+  aggregate="$root/02-knowledge/ai-work-preferences.md"
+  body="$tmp_base/f3-body.txt"
+  printf '%s\n' '入れ替えの途中で中断しても記録だけを残さないこと' > "$body"
+  shim_dir="$tmp_base/f3-shim"
+  mkdir -p "$shim_dir"
+  real_mv=$(command -v mv)
+  marker="$tmp_base/f3-record-moved"
+  cat > "$shim_dir/mv" <<SHIM
+#!/usr/bin/env bash
+if [ "\$2" = "$record" ]; then
+  "$real_mv" "\$@"
+  status=\$?
+  if [ "\$status" -eq 0 ]; then
+    : > "$marker"
+    sleep 8
+  fi
+  exit "\$status"
+fi
+exec "$real_mv" "\$@"
+SHIM
+  chmod +x "$shim_dir/mv"
+  saved_path=$PATH
+  PATH="$shim_dir:$PATH"
+  launch_save "$tmp_base/f3-save" --root "$root" --date 2026-10-02 --title '入れ替え途中の中断' --takeaway '保存は記録と集約が揃って完了する' --file "$body"
+  PATH="$saved_path"
+  if ! wait_for_file '記録の入れ替え完了の合図' "$marker"; then
+    kill "$(cat "$tmp_base/f3-save.pid")" 2>/dev/null
+    wait_save "$tmp_base/f3-save"
+    return 0
+  fi
+  kill -TERM "$(cat "$tmp_base/f3-save.pid")"
+  wait_save "$tmp_base/f3-save"
+  expect_launch_failure '入れ替え途中の中断は非ゼロで終わる' "$tmp_base/f3-save" || return 0
+  expect_empty_root '中断後に記録だけを残さない' "$root" || return 0
+  printf '%s\n' '入れ替えの途中で中断しても記録だけを残さないこと' | run_save --root "$root" --date 2026-10-02 --title '入れ替え途中の中断' --takeaway '保存は記録と集約が揃って完了する' --file "$body"
+  expect_success '回復後の同一保存先での再実行' || return 0
+  expect_file '再実行で記録が作成される' "$record" || return 0
+  expect_file '再実行で集約が作成される' "$aggregate" || return 0
+  expect_count_in_file '集約のエントリは1件だけ' "$aggregate" '出典: [2026-10-02-入れ替え途中の中断.md](../04-materials/prompts/2026-10-02-入れ替え途中の中断.md)' 1 || return 0
+  expect_file_count '保存先に残るのは記録と集約だけ' "$root" 2 || return 0
+  pass
+}
+
+test_p1() {
+  begin 'SCN-P1 同じ保存先への8件の並列保存が全て成功し集約の更新欠落が起きない'
+  local root prompts_dir aggregate body i prefix record_name
+  root=$(new_root 'p1')
+  prompts_dir="$root/04-materials/prompts"
+  aggregate="$root/02-knowledge/ai-work-preferences.md"
+  body="$tmp_base/p1-body.txt"
+  printf '%s\n' '並列実行では同じ保存先への書き込みを排他する' > "$body"
+  for i in 1 2 3 4 5 6 7 8; do
+    prefix="$tmp_base/p1-$i"
+    launch_save "$prefix" --root "$root" --date 2026-10-02 --title "並列保存その$i" --takeaway "並列保存その$i の方針" --file "$body"
+  done
+  for i in 1 2 3 4 5 6 7 8; do
+    wait_save "$tmp_base/p1-$i"
+  done
+  expect_parallel_success '並列8件の終了コード' 8 "$tmp_base/p1-1" "$tmp_base/p1-2" "$tmp_base/p1-3" "$tmp_base/p1-4" "$tmp_base/p1-5" "$tmp_base/p1-6" "$tmp_base/p1-7" "$tmp_base/p1-8" || return 0
+  expect_file_count 'prompts配下は8件の記録だけ' "$prompts_dir" 8 || return 0
+  for i in 1 2 3 4 5 6 7 8; do
+    record_name="2026-10-02-並列保存その$i.md"
+    expect_file "記録$i の作成" "$prompts_dir/$record_name" || return 0
+    expect_count_in_file "集約のエントリ$i は1件だけ" "$aggregate" "出典: [$record_name](../04-materials/prompts/$record_name)" 1 || return 0
+  done
+  expect_file_count '保存先に残るのは記録8件と集約だけ' "$root" 9 || return 0
+  pass
+}
+
+test_p2() {
+  begin 'SCN-P2 同じ保存先への同一日付・同一タイトルの並列保存は1件だけ成功し二重登録しない'
+  local root prompts_dir aggregate body i prefix record_name
+  root=$(new_root 'p2')
+  prompts_dir="$root/04-materials/prompts"
+  aggregate="$root/02-knowledge/ai-work-preferences.md"
+  body="$tmp_base/p2-body.txt"
+  printf '%s\n' '再実行や並列実行でも二重登録しないこと' > "$body"
+  for i in 1 2 3 4; do
+    prefix="$tmp_base/p2-$i"
+    launch_save "$prefix" --root "$root" --date 2026-10-02 --title '並列での二重登録防止' --takeaway '同じ保存先への書き込みは排他する' --file "$body"
+  done
+  for i in 1 2 3 4; do
+    wait_save "$tmp_base/p2-$i"
+  done
+  expect_parallel_success '並列4件のうち成功は1件' 1 "$tmp_base/p2-1" "$tmp_base/p2-2" "$tmp_base/p2-3" "$tmp_base/p2-4" || return 0
+  record_name='2026-10-02-並列での二重登録防止.md'
+  expect_file_count 'prompts配下は記録1件だけ' "$prompts_dir" 1 || return 0
+  expect_file '成功した1件の記録が作成される' "$prompts_dir/$record_name" || return 0
+  expect_count_in_file '集約のエントリは1件だけ' "$aggregate" "出典: [$record_name](../04-materials/prompts/$record_name)" 1 || return 0
+  pass
+}
+
 test_c1_p1
 test_c1_p2
 test_c2_p1
@@ -383,7 +624,15 @@ test_c5_b
 test_c5_c
 test_c5_d
 test_c5_e
+test_f1
+test_f2
+test_f3
+test_p1
+test_p2
 
+if [ "$skip_count" -gt 0 ]; then
+  printf 'スキップ: %d 件\n' "$skip_count" >&2
+fi
 printf '\n--- 結果: %d 成功 / %d 失敗 ---\n' "$pass_count" "$fail_count"
 if [ "$fail_count" -gt 0 ]; then
   exit 1

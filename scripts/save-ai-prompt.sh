@@ -7,6 +7,8 @@ set -euo pipefail
 RECORDS_SUBDIR='04-materials/prompts'
 AGGREGATE_SUBDIR='02-knowledge'
 AGGREGATE_FILE='ai-work-preferences.md'
+# 同じ保存先への書き込みを待つ上限。保存1件はミリ秒単位なので並列実行でも十分な値
+LOCK_TIMEOUT_SECONDS=30
 
 print_usage() {
   cat >&2 <<'EOF'
@@ -29,14 +31,24 @@ fail() {
   exit 2
 }
 
-# 終了時に一時ファイルを残さない。body_tmp / record_tmp は作成時に設定する
+# 終了時に一時ファイルを残さず、入れ替えの途中で終わった場合は入れ替えた記録も取り消す。各変数は作成時に設定する
 body_tmp=
 record_tmp=
+aggregate_tmp=
 cleanup() {
+  # 記録の入れ替えの後・集約の入れ替えの前に終わった場合は、入れ替えた記録を取り消す。
+  # 中断のトラップは前台コマンドの完了直後・次の代入より先に走るためフラグでは窓を判定できず、ディスクに残った集約の一時ファイルで判定する。
+  # 判定は掃除より先に行う。掃除がこの一時ファイルを消した後では途中終端か判別できない
+  if [ -n "$aggregate_tmp" ] && [ -e "$aggregate_tmp" ]; then
+    rm -f "$record_path"
+  fi
   if [ -n "$body_tmp" ]; then rm -f "$body_tmp"; fi
   if [ -n "$record_tmp" ]; then rm -f "$record_tmp"; fi
+  if [ -n "$aggregate_tmp" ]; then rm -f "$aggregate_tmp"; fi
 }
 trap cleanup EXIT
+# 保存の途中での中断も失敗として扱い、EXIT trap の後片付けを通す（SIGKILL だけは対処できない）
+trap 'exit 130' INT TERM HUP
 
 # タイトルと方針は1行として扱う。本文のみ逐語で保存する
 to_single_line() {
@@ -136,7 +148,14 @@ else
   body_source=$body_tmp
 fi
 
-# --- 保存先の決定と衝突検出 ---
+# --- 排他の前提 ---
+
+if ! command -v flock >/dev/null 2>&1; then
+  printf 'エラー: flock が見つからないため保存できない。util-linux を導入する\n' >&2
+  exit 2
+fi
+
+# --- 保存先の決定 ---
 
 if [ -n "$root_arg" ]; then
   root=$root_arg
@@ -151,15 +170,31 @@ slug=$(normalize_slug "$title")
 prompts_dir="$root/$RECORDS_SUBDIR"
 record_name="${save_date}-${slug}.md"
 record_path="$prompts_dir/$record_name"
+aggregate_dir="$root/$AGGREGATE_SUBDIR"
+aggregate_path="$aggregate_dir/$AGGREGATE_FILE"
 
-mkdir -p "$prompts_dir"
+# staging 前に両方の保存先を用意する。片方だけ作って失敗すると集約が欠けた記録の原因になる
+mkdir -p "$prompts_dir" "$aggregate_dir"
+
+# --- 排他（同じ保存先への並列書き込みを直列化する。ロックはfdの寿命でカーネルが管理するため、プロセス死亡時にも残留しない） ---
+
+exec 9<"$prompts_dir"
+if ! flock -w "$LOCK_TIMEOUT_SECONDS" 9; then
+  printf 'エラー: 別の保存処理が %s を %s 秒間占有しているため保存できない\n' "$RECORDS_SUBDIR" "$LOCK_TIMEOUT_SECONDS" >&2
+  exit 2
+fi
+
+# 衝突の判定はロックの内側で行う。直列化しないと並列実行が二重登録する
 if [ -e "$record_path" ]; then
   fail "同じ日付とタイトルの記録が既に存在する: $RECORDS_SUBDIR/$record_name"
 fi
 
-# --- 記録ファイルの生成（一時ファイルへ組み立ててから mv する。本文は EOF まで逐語） ---
+# --- 記録ファイルの staging（本文は EOF まで逐語） ---
 
-record_tmp=$(mktemp "$prompts_dir/.save-ai-prompt-XXXXXX")
+if ! record_tmp=$(mktemp "$prompts_dir/.save-ai-prompt-XXXXXX"); then
+  printf 'エラー: 記録の一時ファイルを作れなかった: %s\n' "$prompts_dir" >&2
+  exit 2
+fi
 {
   printf '# %s %s\n\n' "$save_date" "$title"
   printf -- '- 確認日: %s\n' "$save_date"
@@ -172,20 +207,20 @@ record_tmp=$(mktemp "$prompts_dir/.save-ai-prompt-XXXXXX")
   cat "$body_source"
 } > "$record_tmp"
 
-mv "$record_tmp" "$record_path"
-record_tmp=
+# --- 集約の staging（既存集約の複写に新エントリを付ける。初回はヘッダから作る） ---
 
-# --- 集約への追記（mv が成功した後にのみ書く。壊れた出典リンクを残さないため） ---
-
-aggregate_dir="$root/$AGGREGATE_SUBDIR"
-aggregate_path="$aggregate_dir/$AGGREGATE_FILE"
-mkdir -p "$aggregate_dir"
-if [ ! -f "$aggregate_path" ]; then
+if ! aggregate_tmp=$(mktemp "$aggregate_dir/.save-ai-prompt-aggregate-XXXXXX"); then
+  printf 'エラー: 集約の一時ファイルを作れなかった: %s\n' "$aggregate_dir" >&2
+  exit 2
+fi
+if [ -f "$aggregate_path" ]; then
+  cat "$aggregate_path" > "$aggregate_tmp"
+else
   {
     printf '# AI作業の好み・方針\n\n'
     printf 'AIとのやり取りで指摘され、抜き出した作業の好みや方針を、保存した順に蓄積する。\n'
     printf '出典のリンク先（%s）に元の指摘の原文がある。\n' "$RECORDS_SUBDIR"
-  } > "$aggregate_path"
+  } > "$aggregate_tmp"
 fi
 {
   printf '\n## %s %s\n\n' "$save_date" "$title"
@@ -193,7 +228,22 @@ fi
     printf -- '- %s\n' "${takeaways[$i]}"
   done
   printf '\n出典: [%s](../%s/%s)\n' "$record_name" "$RECORDS_SUBDIR" "$record_name"
-} >> "$aggregate_path"
+} >> "$aggregate_tmp"
+
+# --- コミット（記録→集約の順に入れ替える。集約が先だと失敗時に出典リンク切れのエントリを残す） ---
+
+if ! mv "$record_tmp" "$record_path"; then
+  printf 'エラー: 記録を保存できなかった: %s\n' "$record_path" >&2
+  exit 2
+fi
+record_tmp=
+
+if ! mv "$aggregate_tmp" "$aggregate_path"; then
+  rm -f "$record_path"
+  printf 'エラー: 集約を更新できなかったため記録を取り消した: %s\n' "$aggregate_path" >&2
+  exit 2
+fi
+aggregate_tmp=
 
 printf '保存した: %s/%s\n' "$RECORDS_SUBDIR" "$record_name"
 printf '追記した: %s/%s\n' "$AGGREGATE_SUBDIR" "$AGGREGATE_FILE"

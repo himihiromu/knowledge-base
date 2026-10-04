@@ -6,6 +6,7 @@ set -euo pipefail
 
 RECORDS_SUBDIR='04-materials/prompts'
 SECRET_RECORDS_SUBDIR='01-secret/prompts'
+LOCK_TIMEOUT_SECONDS=30
 
 print_usage() {
   cat >&2 <<'EOF'
@@ -37,6 +38,8 @@ cleanup() {
   if [ -n "$record_tmp" ]; then rm -f "$record_tmp"; fi
 }
 trap cleanup EXIT
+# 待機中を含め、中断時もcleanupを通す（SIGKILLは対処できない）
+trap 'exit 130' INT TERM HUP
 
 # タイトルと取得元は1行として扱う。本文のみ逐語で保存する
 to_single_line() {
@@ -160,14 +163,30 @@ prompts_dir="$root/$records_subdir"
 record_name="${save_date}-${slug}.md"
 record_path="$prompts_dir/$record_name"
 
+# flockがない環境では、排他なしで続行せず保存前に止める。
+if ! command -v flock >/dev/null 2>&1; then
+  printf 'エラー: flock が見つからないため登録できない。util-linux を導入する\n' >&2
+  exit 2
+fi
+
 mkdir -p "$prompts_dir"
+exec 9<"$prompts_dir"
+if ! flock -w "$LOCK_TIMEOUT_SECONDS" 9; then
+  printf 'エラー: 別の保存処理が %s を %s 秒間占有しているため登録できない\n' "$records_subdir" "$LOCK_TIMEOUT_SECONDS" >&2
+  exit 2
+fi
+
+# save-ai-prompt.shも04-materials/prompts/をロックする。判定をロックの内側で行い、両スクリプト間の競合も防ぐ。
 if [ -e "$record_path" ]; then
   fail "同じ日付とタイトルの記録が既に存在する: $records_subdir/$record_name"
 fi
 
 # --- 記録ファイルの生成（一時ファイルへ組み立ててから mv する。本文は EOF まで1バイトも変えずに連結する） ---
 
-record_tmp=$(mktemp "$prompts_dir/.register-ai-prompt-XXXXXX")
+if ! record_tmp=$(mktemp "$prompts_dir/.register-ai-prompt-XXXXXX"); then
+  printf 'エラー: 記録の一時ファイルを作れなかった: %s\n' "$prompts_dir" >&2
+  exit 2
+fi
 {
   printf '# %s %s\n\n' "$save_date" "$title"
   printf -- '- 確認日: %s\n' "$save_date"
@@ -176,7 +195,10 @@ record_tmp=$(mktemp "$prompts_dir/.register-ai-prompt-XXXXXX")
   cat "$body_source"
 } > "$record_tmp"
 
-mv "$record_tmp" "$record_path"
+if ! mv "$record_tmp" "$record_path"; then
+  printf 'エラー: 記録を保存できなかった: %s\n' "$record_path" >&2
+  exit 2
+fi
 record_tmp=
 
 # --- 報告 ---

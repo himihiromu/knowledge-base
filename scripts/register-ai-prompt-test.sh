@@ -8,6 +8,7 @@ set -uo pipefail
 
 SCRIPT_DIR=$(cd "$(dirname "$0")" && pwd)
 TARGET="$SCRIPT_DIR/register-ai-prompt.sh"
+SAVE_TARGET="$SCRIPT_DIR/save-ai-prompt.sh"
 
 if [ ! -f "$TARGET" ]; then
   printf 'FAIL scripts/register-ai-prompt.sh が存在しないためテストを実行できない（未実装）\n' >&2
@@ -181,6 +182,38 @@ expect_file_count() {
   actual=$(find "$root" -type f | wc -l)
   if [ "$actual" -ne "$expected" ]; then
     fail "$desc: ファイル数が $actual（期待 $expected）"
+    return 1
+  fi
+  return 0
+}
+
+launch_register() {
+  local prefix="$1"
+  shift
+  "$TARGET" "$@" >"$prefix.out" 2>"$prefix.err" &
+  printf '%s\n' "$!" >"$prefix.pid"
+}
+
+wait_register() {
+  local prefix="$1" pid
+  pid=$(cat "$prefix.pid")
+  wait "$pid"
+  printf '%s\n' "$?" >"$prefix.status"
+}
+
+expect_parallel_success() {
+  local desc="$1" expected="$2" prefix status ok=0 failures=
+  shift 2
+  for prefix in "$@"; do
+    status=$(cat "$prefix.status")
+    if [ "$status" -eq 0 ]; then
+      ok=$((ok + 1))
+    else
+      failures="$failures [終了 $status] $(head -n 1 "$prefix.err")"
+    fi
+  done
+  if [ "$ok" -ne "$expected" ]; then
+    fail "$desc: 成功 $ok 件（期待 $expected）。$failures"
     return 1
   fi
   return 0
@@ -419,6 +452,124 @@ test_r3_p2() {
   pass
 }
 
+test_r4_f1() {
+  begin 'REG-SCN-F1 mv失敗時に記録と一時ファイルを残さず、同じ入力で再実行できる'
+  local root shim_dir record
+  root=$(new_root 'f1')
+  shim_dir="$tmp_base/f1-shim"
+  mkdir -p "$shim_dir"
+  cat >"$shim_dir/mv" <<'SHIM'
+#!/usr/bin/env bash
+exit 1
+SHIM
+  chmod +x "$shim_dir/mv"
+  saved_path=$PATH
+  PATH="$shim_dir:$PATH"
+  run_register --root "$root" --date 2026-09-29 --source claude --title '保存失敗からの再実行' <<< '失敗後に残らないサンプル'
+  PATH=$saved_path
+  expect_failure 'mv失敗' || return 0
+  expect_empty_root '失敗後に記録・一時ファイルを残さない' "$root" || return 0
+  printf '%s\n' '失敗後に残らないサンプル' | run_register --root "$root" --date 2026-09-29 --source claude --title '保存失敗からの再実行'
+  expect_success '失敗後の同一入力による再実行' || return 0
+  record="$root/04-materials/prompts/2026-09-29-保存失敗からの再実行.md"
+  expect_file '再実行後の記録' "$record" || return 0
+  expect_file_count '出力が記録1件だけ' "$root" 1 || return 0
+  pass
+}
+
+test_r4_p1() {
+  begin 'REG-SCN-P1 同じ保存先への異なる8件の並列登録がすべて成功する'
+  local root body i prefix record
+  root=$(new_root 'p1')
+  body="$tmp_base/p1-body.txt"
+  printf '%s\n' '並列登録の本文サンプル' >"$body"
+  for i in 1 2 3 4 5 6 7 8; do
+    prefix="$tmp_base/p1-$i"
+    launch_register "$prefix" --root "$root" --date 2026-09-29 --source codex --title "並列登録その$i" --file "$body"
+  done
+  for i in 1 2 3 4 5 6 7 8; do wait_register "$tmp_base/p1-$i"; done
+  expect_parallel_success '並列8件の終了コード' 8 "$tmp_base/p1-1" "$tmp_base/p1-2" "$tmp_base/p1-3" "$tmp_base/p1-4" "$tmp_base/p1-5" "$tmp_base/p1-6" "$tmp_base/p1-7" "$tmp_base/p1-8" || return 0
+  expect_file_count 'prompts配下の記録数' "$root/04-materials/prompts" 8 || return 0
+  for i in 1 2 3 4 5 6 7 8; do
+    record="$root/04-materials/prompts/2026-09-29-並列登録その$i.md"
+    expect_file "記録$i" "$record" || return 0
+  done
+  pass
+}
+
+test_r4_p2() {
+  begin 'REG-SCN-P2 同じ日付・タイトルの並列登録は1件だけ成功する'
+  local root body i prefix shim_dir real_mv record saved_path
+  root=$(new_root 'p2')
+  body="$tmp_base/p2-body.txt"
+  printf '%s\n' '並列登録の本文サンプル' >"$body"
+  record="$root/04-materials/prompts/2026-09-29-並列重複登録.md"
+  shim_dir="$tmp_base/p2-shim"
+  mkdir -p "$shim_dir"
+  real_mv=$(command -v mv)
+  cat >"$shim_dir/mv" <<SHIM
+#!/usr/bin/env bash
+if [ "\$2" = "$record" ]; then sleep 1; fi
+exec "$real_mv" "\$@"
+SHIM
+  chmod +x "$shim_dir/mv"
+  saved_path=$PATH
+  PATH="$shim_dir:$PATH"
+  for i in 1 2 3 4; do
+    prefix="$tmp_base/p2-$i"
+    launch_register "$prefix" --root "$root" --date 2026-09-29 --source claude --title '並列重複登録' --file "$body"
+  done
+  PATH=$saved_path
+  for i in 1 2 3 4; do wait_register "$tmp_base/p2-$i"; done
+  expect_parallel_success '並列4件のうち成功は1件' 1 "$tmp_base/p2-1" "$tmp_base/p2-2" "$tmp_base/p2-3" "$tmp_base/p2-4" || return 0
+  expect_file_count 'prompts配下は記録1件だけ' "$root/04-materials/prompts" 1 || return 0
+  expect_file_count '一時ファイルを残さない' "$root" 1 || return 0
+  pass
+}
+
+test_r4_p3() {
+  begin 'REG-SCN-P3 saveとregisterの同名並列書き込みは片方だけ成功する'
+  local root record aggregate body save_pid register_pid save_status register_status successes=0 shim_dir real_mv saved_path
+  root=$(new_root 'p3')
+  body="$tmp_base/p3-body.txt"
+  printf '%s\n' '共有ロックの競合サンプル' >"$body"
+  record="$root/04-materials/prompts/2026-09-29-共有ロック競合.md"
+  aggregate="$root/02-knowledge/ai-work-preferences.md"
+  shim_dir="$tmp_base/p3-shim"
+  mkdir -p "$shim_dir"
+  real_mv=$(command -v mv)
+  cat >"$shim_dir/mv" <<SHIM
+#!/usr/bin/env bash
+if [ "\$2" = "$record" ]; then sleep 1; fi
+exec "$real_mv" "\$@"
+SHIM
+  chmod +x "$shim_dir/mv"
+  saved_path=$PATH
+  PATH="$shim_dir:$PATH"
+  "$SAVE_TARGET" --root "$root" --date 2026-09-29 --title '共有ロック競合' --takeaway '保存先の排他を共有する' --file "$body" >"$tmp_base/p3-save.out" 2>"$tmp_base/p3-save.err" &
+  save_pid=$!
+  "$TARGET" --root "$root" --date 2026-09-29 --source claude --title '共有ロック競合' --file "$body" >"$tmp_base/p3-register.out" 2>"$tmp_base/p3-register.err" &
+  register_pid=$!
+  PATH=$saved_path
+  wait "$save_pid"; save_status=$?
+  wait "$register_pid"; register_status=$?
+  [ "$save_status" -eq 0 ] && successes=$((successes + 1))
+  [ "$register_status" -eq 0 ] && successes=$((successes + 1))
+  if [ "$successes" -ne 1 ]; then
+    fail "共有ロックの成功数が $successes（期待 1）。save=$save_status register=$register_status"
+    return 0
+  fi
+  expect_file '共有ロック競合後の記録' "$record" || return 0
+  if [ "$save_status" -eq 0 ]; then
+    expect_file 'save成功時の集約' "$aggregate" || return 0
+    expect_count_in_file '集約の該当エントリは1件' "$aggregate" '出典: [2026-09-29-共有ロック競合.md](../04-materials/prompts/2026-09-29-共有ロック競合.md)' 1 || return 0
+  else
+    expect_absent 'register成功時はsaveの集約が作られない' "$aggregate" || return 0
+  fi
+  expect_file_count '記録以外の一時ファイルを残さない' "$root" "$([ -e "$aggregate" ] && printf 2 || printf 1)" || return 0
+  pass
+}
+
 test_r1_p1
 test_r1_p2
 test_r1_p3
@@ -436,6 +587,10 @@ test_r3_n4
 test_r3_n5
 test_r3_p1
 test_r3_p2
+test_r4_f1
+test_r4_p1
+test_r4_p2
+test_r4_p3
 
 printf '\n--- 結果: %d 成功 / %d 失敗 ---\n' "$pass_count" "$fail_count"
 if [ "$fail_count" -gt 0 ]; then
