@@ -1,0 +1,25 @@
+# 機械判定可能なナレッジ品質検査（scripts/check-knowledge-quality.mjs）を main への流入時に強制する。
+# 検査対象はリポジトリ内の追跡済みMarkdownのみで、外部サービスへの取得やシークレットは不要
+name: knowledge-quality
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      # 違反がある場合はスクリプトが終了コード1で終わり、ジョブを失敗させる
+      - run: node scripts/check-knowledge-quality.mjs
+      # ディレクトリ指定はこの環境の node --test で失敗するため、glob形式で指定する
+      - run: node --test 'scripts/test/*.test.mjs'
