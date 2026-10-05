@@ -23,7 +23,7 @@
 ## 成果物・検証結果
 
 - 成果物: [save-ai-prompt.sh](../../scripts/save-ai-prompt.sh)、[スクリプト説明](../../scripts/README.md)
-- 検証: 2026-10-04時点のmainで後続のatomic化・排他制御まで反映済み。過去の詳細なテスト結果は[TAKT復旧記録](../takt-recovery.md)を参照。
+- 検証: 2026-10-04時点のmainで後続のatomic化・排他制御まで反映済み。過去の個別テスト件数は、現行mainで参照可能な記録から確認できない。
 
 ## 関連タスク・資料
 
