@@ -9,6 +9,9 @@ import process from 'node:process';
 // 通常の検索・読み取りから外す運用（agents.md、README.md）に合わせ、解析対象から除外するパス。README.md
 // からの01-secret/案内リンクが違反にならないよう、存在判定の集合には除外パス配下も含める
 const EXCLUDED_PATHS = ['01-secret/', '06-storage/', '99-trash/', '.takt/'];
+// 会話履歴は原文を保持するため、本文中のMarkdownリンク・フェンスを検査しない。
+// ただし他の文書から参照できるよう、追跡ファイルの存在判定には含める。
+const RAW_TRANSCRIPT_ROOTS = ['04-materials/prompts/'];
 // 内容メモの配置（00-rules/workflow.md）。索引・案内のREADMEと、inbox・promptsの未整理・記録ファイルは
 // 被リンクを前提としないため orphan・重複・矛盾・必須メタデータの判定対象から外す
 const MEMO_ROOTS = ['02-knowledge/', '03-output/', '04-materials/'];
@@ -35,6 +38,10 @@ const DAYS_IN_MONTH = [31, 29, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
 
 function isExcludedPath(path) {
   return EXCLUDED_PATHS.some((prefix) => path.startsWith(prefix));
+}
+
+function isRawTranscript(path) {
+  return RAW_TRANSCRIPT_ROOTS.some((prefix) => path.startsWith(prefix));
 }
 
 function isIndexReadme(path) {
@@ -405,7 +412,8 @@ function inspectLint(parsedFiles) {
   return violations;
 }
 
-// 追跡済みファイル一覧から品質検査を行う純関数。除外パス配下は解析せず、存在判定の集合には参加させる
+// 追跡済みファイル一覧から品質検査を行う純関数。除外パス配下と会話履歴は解析せず、
+// 存在判定の集合には参加させる
 export function analyzeKnowledgeQuality(files) {
   const pathSet = new Set();
   const directorySet = new Set();
@@ -417,7 +425,9 @@ export function analyzeKnowledgeQuality(files) {
     }
   }
   const parsedFiles = files
-    .filter((entry) => !isExcludedPath(entry.path) && entry.path.endsWith('.md'))
+    .filter((entry) => !isExcludedPath(entry.path)
+      && !isRawTranscript(entry.path)
+      && entry.path.endsWith('.md'))
     .map(parseFile);
   const parsedMemories = parsedFiles.filter((parsed) => isContentMemo(parsed.path));
   const violations = [

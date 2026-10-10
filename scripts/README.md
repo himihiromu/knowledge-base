@@ -264,20 +264,23 @@ bash、GNU coreutils（`mktemp`、`mkdir`、`rm`、`sha256sum`、`wc`、`tail`�
 
 なし。`--root` に `mktemp` の一時ディレクトリを渡すため、リポジトリの実物（`04-materials` と `01-secret` を含む）は書き換えない。一時ディレクトリは終了時に削除する。
 
-## fetch-ai-prompts.mjs — Claude・Codexからのプロンプト取得
+## fetch-ai-prompts.mjs — Claude・Codexからの会話履歴取得
 
 ### 目的
 
-Claude CodeとCodexのローカルセッション保存から、ユーザーが入力したプロンプトを原文（逐語）と出典付きで抽出し、JSONLとして標準出力へ渡す。取得のみを行い、リポジトリと保存先への書き込みはしない。出力をリポジトリへ登録する処理は、この出力を入力とする別TODOの登録スクリプトが担う。
+Claude CodeとCodexのローカルセッション保存から、ユーザーとアシスタントの可視テキストを原文（逐語）と出典付きで抽出し、JSONLとして標準出力へ渡す。既定では会話全体をセッション単位、`--per-prompt` ではユーザー発言単位で出力する。取得のみを行い、リポジトリと保存先への書き込みはしない。内部推論、ツール呼び出し、ツール結果など会話本文でないレコードは含めない。
 
 ### 実行方法
 
 ```console
-node scripts/fetch-ai-prompts.mjs [--claude-dir DIR] [--codex-dir DIR] [--since YYYY-MM-DD] [--until YYYY-MM-DD]
+node scripts/fetch-ai-prompts.mjs [--claude-dir DIR] [--codex-dir DIR] [--since YYYY-MM-DD] [--until YYYY-MM-DD] [--per-prompt]
 ```
 
 - `--claude-dir`（既定 `~/.claude/projects`）と `--codex-dir`（既定 `~/.codex/sessions`）で保存先を差し替える。確認スイートは一時ディレクトリを渡す。
 - `--since`・`--until` は抽出する期間の開始日・終了日。どちらもその日を含み、タイムスタンプ先頭の `YYYY-MM-DD` で比較する。省略した場合は期間で絞り込まない。フィルタを使うとき、タイムスタンプを持たないレコードや先頭が `YYYY-MM-DD` で始まらないタイムスタンプのレコードは出力せず、`ファイルパス:行番号` 付きの警告の対象になる（終了コード1）。フィルタが無いときは、タイムスタンプを持たないレコードも `timestamp` が `null` のまま出力される。
+- 既定ではユーザーとアシスタントの可視発言をセッションごとにまとめて1行1セッションのJSONLで出力する。日付フィルタは該当発言のあるセッションを選び、そのセッション全体の発言を含める。
+- `session_id` が取得できない発言はソースファイルごとにまとめる。ユーザー発言を含まないセッションは除外する。
+- `--per-prompt` を指定すると、ユーザー発言だけを従来形式の1発言1行JSONLで出力する。
 - `--help` で使い方を表示する。
 - 終了コード: 0=完了、1=データ問題（警告があり、出力は不完全になり得る）、2=使い方・環境エラー。
 
@@ -292,21 +295,40 @@ Node.js。外部パッケージは使わない。
 
 Claudeのレコードは次のように分類する。
 
-- 抽出: トップレベル `type` が `user`、`isSidechain` が `true` でない、`message.role` が `user` のレコード。本文は `message.content` が文字列ならそのまま、配列なら `type` が `text` のブロックの `text` を改行で連結する
-- 無視: `assistant`、`summary`、`system`、`attachment`、`atis-latch`、`queue-operation`、`last-prompt`、`cost-state`、`mode`、`permission-mode`、`file-history-snapshot` の各種別。`text` ブロックを持たない user レコード（`tool_result` のみ等）もユーザー入力ではないため無視する
-- 警告: 上記以外の種別、`message.role=user` の無い user レコード、`message.content` が文字列でも配列でもない user レコード、`text` ブロックに文字列の本文が無いレコード、オブジェクトでないJSONレコード（`null` を含む）、JSONとして解釈できない行
+- 抽出: トップレベル `type` が `user` または `assistant`、`isSidechain` が `true` でなく、`message.role` がレコード種別と一致するレコード。本文は `message.content` が文字列ならそのまま、配列なら `type` が `text` のブロックだけを改行で連結する
+- 無視: `summary`、`system`、`attachment`、`atis-latch`、`queue-operation`、`last-prompt`、`cost-state`、`mode`、`permission-mode`、`file-history-snapshot` の各種別。`text` ブロックを持たないレコード（`tool_result` 等）も無視する
+- 警告: 上記以外の種別、役割がレコード種別と一致しないuser/assistantレコード、`message.content` が文字列でも配列でもないレコード、`text` ブロックに文字列の本文が無いレコード、オブジェクトでないJSONレコード（`null` を含む）、JSONとして解釈できない行
 
 Codexのレコードは次のように分類する。
 
-- 抽出: `type` が `response_item`、`payload.type` が `message`、`payload.role` が `user` のレコード。本文は `payload.content` 内の `type` が `input_text` のブロックの `text` を改行で連結する
-- 無視: `session_meta`、`event_msg`、`turn_context`、`world_state`、`token_usage_record`、`compacted` の各種別。`payload.type` が `reasoning`、`function_call`、`function_call_output`、`custom_tool_call`、`custom_tool_call_output` の response_item、`role` が `user` でないメッセージ（`assistant`、`developer`）、`input_text` ブロックを持たないメッセージも無視する
-- 警告: 上記以外の種別、`payload` の無い response_item、`content` が配列でないユーザーメッセージ、`input_text` ブロックに文字列の本文が無いレコード、オブジェクトでないJSONレコード（`null` を含む）、JSONとして解釈できない行
+- 抽出: `type` が `response_item`、`payload.type` が `message`、`payload.role` が `user` または `assistant` のレコード。本文はユーザーなら `input_text`、アシスタントなら `output_text` のブロックだけを改行で連結する。アシスタントの `phase` が `final` または `commentary` のものを収録し、phaseが無いレコードも保持する
+- 無視: `session_meta`、`event_msg`、`turn_context`、`world_state`、`token_usage_record`、`compacted` の各種別。`payload.type` が `reasoning`、`function_call`、`function_call_output`、`custom_tool_call`、`custom_tool_call_output` のresponse_item、developerなどユーザー・アシスタント以外の役割、対応する可視テキストブロックを持たないメッセージも無視する
+- 警告: 上記以外の種別、`payload` の無い response_item、`content` が配列でない対象メッセージ、可視テキストブロックに文字列の本文が無いレコード、オブジェクトでないJSONレコード（`null` を含む）、JSONとして解釈できない行
 
 警告は `ファイルパス:行番号` 付きで標準エラー出力へ出し、警告が1件でもあるときは終了コード1で終わる。このとき標準出力には、警告の無かったレコードから取り出せた分だけが出る（出力は不完全になり得る）。ファイルやディレクトリの読み取りに失敗したときの警告だけは行番号を持たず、`パス: メッセージ` の形式で出る。
 
 ### 出力（登録スクリプトへの受け渡し形式）
 
-標準出力へ、UTF-8・LF・1行1エントリのJSONL（`JSON.stringify` のコンパクト形式、末尾改行）で出す。この形式が別TODOの登録スクリプトの入力契約であり、変更するときは登録側と同じ変更で更新する。原文に個人情報や機密が含まれ得るため、出力の取り扱いと保存先（01か04か）の判断は登録側にある。
+標準出力へ、UTF-8・LF・1行1セッションのJSONL（`JSON.stringify` のコンパクト形式、末尾改行）で出す。各発言の出典と物理行番号を保持する。原文に個人情報や機密が含まれ得るため、公開前に内容を確認し、必要に応じて機密情報ルールに従う。
+
+```json
+{"source":"codex","session_id":"…またはnull","messages":[{"role":"user","timestamp":"…またはnull","text":"原文の逐語","source_file":"…","record_line":42}]}
+```
+
+セッション形式のフィールド:
+
+| フィールド | 内容 |
+|-----------|------|
+| `source` | `claude` または `codex` |
+| `session_id` | セッションID。取得できない場合は `null` |
+| `messages` | セッション内のユーザー・アシスタント可視発言の配列 |
+| `messages[].role` | `user` または `assistant` |
+| `messages[].timestamp` | レコードの `timestamp` をそのまま保持。無い場合は `null` |
+| `messages[].text` | 発言原文。変換・要約・整形をしない |
+| `messages[].source_file` | ソースファイルの絶対パス |
+| `messages[].record_line` | ソースファイル内の物理行番号（1始まり） |
+
+`--per-prompt` の場合は、発言単位で次の形式を出力する。
 
 ```json
 {"source":"claude","session_id":"…またはnull","timestamp":"…またはnull","prompt":"原文の逐語","source_file":"…","record_line":42}
@@ -315,13 +337,13 @@ Codexのレコードは次のように分類する。
 | フィールド | 内容 |
 |-----------|------|
 | `source` | `claude` または `codex` |
-| `session_id` | Claudeはレコードの `sessionId`、Codexはそのレコードより前に現れた最後の `session_meta` の `payload.id`（実機データでは `payload.session_id` と同値）。文字列として取れない場合は `null` |
-| `timestamp` | レコードの `timestamp` を正規化せずそのまま。無い場合は `null` |
-| `prompt` | プロンプト原文。変換・要約・整形をしない |
+| `session_id` | Claudeはレコードの `sessionId`、Codexはそのレコードより前に現れた最後の `session_meta` の `payload.id`。文字列として取れない場合は `null` |
+| `timestamp` | レコードの `timestamp` をそのまま保持。無い場合は `null` |
+| `prompt` | 発言原文。変換・要約・整形をしない |
 | `source_file` | ソースファイルの絶対パス |
 | `record_line` | ソースファイル内の物理行番号（1始まり。無視種の行も数える） |
 
-- 出力順: claudeのファイル群（ソース相対パス順）→ codexのファイル群（同）、ファイル内は行順。この順序は決定的である。
+- 出力順: claudeのファイル群（ソース相対パス順）→ codexのファイル群（同）、ファイル内は行順。この順序は決定的である。セッション内の発言はタイムスタンプ順、セッションの出力順は最初に現れた順。ユーザー発言を含まないセッションは除外する。
 - 抽出が0件のときは標準出力を空にし、標準エラー出力に注記する。終了コード0は警告が1件も無いときに限る。警告があるときは、注記と警告を出して終了コード1で終わる。
 
 ### 失敗時の挙動
@@ -336,6 +358,24 @@ Codexのレコードは次のように分類する。
 ### 未確認事項
 
 - ツールのバージョン更新によるレコード形式の変化。本節の分類は2026-10-03時点の実機データに基づく。契約外の形式は警告で表面化するため、警告が出たときは本節の分類と照らし合わせる。
+
+## register-ai-prompt-session.mjs — 会話履歴の登録
+
+取得JSONLの各セッションを、発言者・時刻・原文のみのMarkdownとして登録する。1セッション1ファイルで、既定は `04-materials/prompts/`、機密情報などを含む場合は `--secret` で `01-secret/prompts/` へ保存する。`--batch` はJSONLの全行をまとめて登録する。
+
+```console
+umask 077 && node scripts/fetch-ai-prompts.mjs > /tmp/ai-conversations.jsonl
+node scripts/register-ai-prompt-session.mjs --batch --file /tmp/ai-conversations.jsonl
+```
+
+本文は役割ラベル、時刻、会話テキストで構成し、要約や分析を加えない。ファイル名には日付・取得元・セッションIDを使う。既存ファイルは上書きしない。公開前に機密情報や個人情報を確認する。
+
+## Claude/Codexの収集から指摘傾向の分析まで
+
+1. `fetch-ai-prompts.mjs` でユーザー・アシスタントの可視会話をセッション単位で収集する。
+2. `register-ai-prompt-session.mjs --batch` で各セッション全文を04へ保存する。04には会話原文以外を置かない。
+3. [プロンプト傾向分析スキル](../agents/skills/prompt-trend-analysis/SKILL.md)に従い、全文記録から指摘候補を探す。元セッションの前後関係を確認し、タスク依頼と成果物への指摘を分ける。
+4. 分析レポートは03へ置き、検証済みで再利用できる知識だけを02へ整理する。Ruleへ反映するのは常時適用する意思が明示された場合に限る。
 ## filter-related-knowledge.test.mjs — SKILL.md のリンク検査
 
 - 目的: `agents/skills/filter-related-knowledge/SKILL.md` のリンク契約検査。出典リンクの存在、相対リンク参照先の実在、相対リンクが通常検索の除外対象を参照しないことを確認する。
@@ -348,7 +388,7 @@ Codexのレコードは次のように分類する。
 - 実行方法: `node scripts/check-knowledge-quality.mjs`。`git ls-files` で追跡済みファイルを取得する。終了コードは 0=違反なし（候補だけのときも0）、1=違反あり、2=実行環境エラー。報告は `ファイル:行 [カテゴリ] 理由` 行と、外部URLの一覧件数。
 - 依存ツール: Node.js、git。外部パッケージは使わない。読み取り専用で、ファイル・作業ツリー・ステージを変更しない。
 - 変更対象: なし（標準出力と標準エラー出力への報告のみ）。テストは `node --test scripts/test/check-knowledge-quality.test.mjs`。
-- 解析対象: 追跡済み `.md`。`01-secret/`・`06-storage/`・`99-trash/`・`.takt/` 配下は解析しないが、READMEからの案内リンクを違反にしないため存在判定の集合には参加させる。内容メモ（orphan・重複・矛盾・必須メタデータの判定対象）は `02-knowledge/`・`03-output/`・`04-materials/` 配下のmdのうち、索引・案内のREADMEと `inbox`・`prompts` を除いたもの。
+- 解析対象: 追跡済み `.md`。`01-secret/`・`06-storage/`・`99-trash/`・`.takt/` 配下と `04-materials/prompts/` の会話履歴は内容を解析しないが、他の文書からのリンク先存在判定には参加させる。会話履歴は原文を保持するため、その内部リンクやMarkdown構造は検査しない。内容メモ（orphan・重複・矛盾・必須メタデータの判定対象）は `02-knowledge/`・`03-output/`・`04-materials/` 配下のmdのうち、索引・案内のREADMEと `inbox`・`prompts` を除いたもの。
 - 判定基準と区分:
   - 出典リンク切れ（違反）: インラインリンク `[テキスト](参照先)` の相対参照を**リンク元ファイルのディレクトリ基準**で解決し、追跡済みのファイル・ディレクトリと突合する。md宛のアンカーはGitHubの見出しアンカー規則（小文字化・記号除去・空白を`-`へ）で正規化して照合する。同一ページアンカー（`#` 開始）は解決を行わず、同じ正規化規則で参照元の文書自身の見出しと照合する（見出しが1つも無い文書は照合をスキップする）。`../`・`.` のように解決結果が空になる参照は存在判定の対象外とする。`mailto:`・外部URL・参照形式リンクは対象外とし、外部URLは取得せず確認箇所として一覧化する（到達性の判断は人とツールに任せる）。ルート絶対参照（`/` 開始）はGitHub上のルート基準の解決と一致しないため保証対象外とし、この検査では同じ相対解決の規則が適用される。
   - orphan knowledge（候補）: 確認日と出典セクションを備えた内容メモのうち、被リンクが0件のもの。被リンクは内容メモからのリンクと索引READMEからのリンクで数えるが、索引READMEからの被リンクは `02-knowledge/`・`03-output/` 宛だけ計上する。04は元資料であり索引への掲載は参照を意味しないため、04のメモは内容メモから拾われているかを候補として人に見せる。被リンク0件は機械で確定できる事実だが問題かどうかは意図に依存するため候補とする。
