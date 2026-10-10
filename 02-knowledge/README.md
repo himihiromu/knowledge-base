@@ -5,3 +5,4 @@
 目的に応じて[03-output](../03-output/README.md)の成果物に活用する。
 
 - [開発の知見](development/README.md)
+- [AIとの協働で重視する判断基準](ai-collaboration-preferences.md)
