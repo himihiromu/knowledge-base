@@ -3,3 +3,7 @@
 [02-knowledge](../02-knowledge/README.md)の知識を使って作る記事、設計書、レポートなどを置く。
 目的・想定読者・利用した知識へのリンクを残す。下書きもここで管理し、状態を明記する。
 進捗や次の行動は[05-todo](../05-todo/README.md)に記録する。
+
+## レポート
+
+- [Knowledge Base ヘルスチェック設計・小規模試行](knowledge-base-health-check-review.md)
