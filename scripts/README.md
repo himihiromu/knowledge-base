@@ -221,11 +221,11 @@ bash、GNU coreutils（`mktemp`、`mkdir`、`rm`、`sha256sum`、`wc`、`tail`�
 
 なし。`--root` に `mktemp` の一時ディレクトリを渡すため、リポジトリの実物（`04-materials` と `01-secret` を含む）は書き換えない。一時ディレクトリは終了時に削除する。
 
-## fetch-ai-prompts.mjs — Claude・Codexからのプロンプト取得
+## fetch-ai-prompts.mjs — Claude・Codexからの会話履歴取得
 
 ### 目的
 
-Claude CodeとCodexのローカルセッション保存から、ユーザーが入力したプロンプトを原文（逐語）と出典付きで抽出し、JSONLとして標準出力へ渡す。既定ではセッション単位、`--per-prompt` では発言単位で出力する。取得のみを行い、リポジトリと保存先への書き込みはしない。
+Claude CodeとCodexのローカルセッション保存から、ユーザーとアシスタントの可視テキストを原文（逐語）と出典付きで抽出し、JSONLとして標準出力へ渡す。既定では会話全体をセッション単位、`--per-prompt` ではユーザー発言単位で出力する。取得のみを行い、リポジトリと保存先への書き込みはしない。内部推論、ツール呼び出し、ツール結果など会話本文でないレコードは含めない。
 
 ### 実行方法
 
@@ -235,9 +235,9 @@ node scripts/fetch-ai-prompts.mjs [--claude-dir DIR] [--codex-dir DIR] [--since 
 
 - `--claude-dir`（既定 `~/.claude/projects`）と `--codex-dir`（既定 `~/.codex/sessions`）で保存先を差し替える。確認スイートは一時ディレクトリを渡す。
 - `--since`・`--until` は抽出する期間の開始日・終了日。どちらもその日を含み、タイムスタンプ先頭の `YYYY-MM-DD` で比較する。省略した場合は期間で絞り込まない。フィルタを使うとき、タイムスタンプを持たないレコードや先頭が `YYYY-MM-DD` で始まらないタイムスタンプのレコードは出力せず、`ファイルパス:行番号` 付きの警告の対象になる（終了コード1）。フィルタが無いときは、タイムスタンプを持たないレコードも `timestamp` が `null` のまま出力される。
-- 既定ではユーザー発言をセッションごとにまとめて1行1セッションのJSONLで出力する。日付フィルタは該当発言のあるセッションを選び、そのセッションの期間外の発言も文脈として含める。
-- セッション形式はアシスタントの返答を含まず、ユーザー発言だけを時系列で保持する。`session_id` が取得できない発言はソースファイルごとにまとめる。
-- `--per-prompt` を指定すると、従来どおり1発言1行のJSONLを出力する。
+- 既定ではユーザーとアシスタントの可視発言をセッションごとにまとめて1行1セッションのJSONLで出力する。日付フィルタは該当発言のあるセッションを選び、そのセッション全体の発言を含める。
+- `session_id` が取得できない発言はソースファイルごとにまとめる。ユーザー発言を含まないセッションは除外する。
+- `--per-prompt` を指定すると、ユーザー発言だけを従来形式の1発言1行JSONLで出力する。
 - `--help` で使い方を表示する。
 - 終了コード: 0=完了、1=データ問題（警告があり、出力は不完全になり得る）、2=使い方・環境エラー。
 
@@ -252,24 +252,24 @@ Node.js。外部パッケージは使わない。
 
 Claudeのレコードは次のように分類する。
 
-- 抽出: トップレベル `type` が `user`、`isSidechain` が `true` でない、`message.role` が `user` のレコード。本文は `message.content` が文字列ならそのまま、配列なら `type` が `text` のブロックの `text` を改行で連結する
-- 無視: `assistant`、`summary`、`system`、`attachment`、`atis-latch`、`queue-operation`、`last-prompt`、`cost-state`、`mode`、`permission-mode`、`file-history-snapshot` の各種別。`text` ブロックを持たない user レコード（`tool_result` のみ等）もユーザー入力ではないため無視する
-- 警告: 上記以外の種別、`message.role=user` の無い user レコード、`message.content` が文字列でも配列でもない user レコード、`text` ブロックに文字列の本文が無いレコード、オブジェクトでないJSONレコード（`null` を含む）、JSONとして解釈できない行
+- 抽出: トップレベル `type` が `user` または `assistant`、`isSidechain` が `true` でなく、`message.role` がレコード種別と一致するレコード。本文は `message.content` が文字列ならそのまま、配列なら `type` が `text` のブロックだけを改行で連結する
+- 無視: `summary`、`system`、`attachment`、`atis-latch`、`queue-operation`、`last-prompt`、`cost-state`、`mode`、`permission-mode`、`file-history-snapshot` の各種別。`text` ブロックを持たないレコード（`tool_result` 等）も無視する
+- 警告: 上記以外の種別、役割がレコード種別と一致しないuser/assistantレコード、`message.content` が文字列でも配列でもないレコード、`text` ブロックに文字列の本文が無いレコード、オブジェクトでないJSONレコード（`null` を含む）、JSONとして解釈できない行
 
 Codexのレコードは次のように分類する。
 
-- 抽出: `type` が `response_item`、`payload.type` が `message`、`payload.role` が `user` のレコード。本文は `payload.content` 内の `type` が `input_text` のブロックの `text` を改行で連結する
-- 無視: `session_meta`、`event_msg`、`turn_context`、`world_state`、`token_usage_record`、`compacted` の各種別。`payload.type` が `reasoning`、`function_call`、`function_call_output`、`custom_tool_call`、`custom_tool_call_output` の response_item、`role` が `user` でないメッセージ（`assistant`、`developer`）、`input_text` ブロックを持たないメッセージも無視する
-- 警告: 上記以外の種別、`payload` の無い response_item、`content` が配列でないユーザーメッセージ、`input_text` ブロックに文字列の本文が無いレコード、オブジェクトでないJSONレコード（`null` を含む）、JSONとして解釈できない行
+- 抽出: `type` が `response_item`、`payload.type` が `message`、`payload.role` が `user` または `assistant` のレコード。本文はユーザーなら `input_text`、アシスタントなら `output_text` のブロックだけを改行で連結する。アシスタントの `phase` が `final` または `commentary` のものを収録し、phaseが無いレコードも保持する
+- 無視: `session_meta`、`event_msg`、`turn_context`、`world_state`、`token_usage_record`、`compacted` の各種別。`payload.type` が `reasoning`、`function_call`、`function_call_output`、`custom_tool_call`、`custom_tool_call_output` のresponse_item、developerなどユーザー・アシスタント以外の役割、対応する可視テキストブロックを持たないメッセージも無視する
+- 警告: 上記以外の種別、`payload` の無い response_item、`content` が配列でない対象メッセージ、可視テキストブロックに文字列の本文が無いレコード、オブジェクトでないJSONレコード（`null` を含む）、JSONとして解釈できない行
 
 警告は `ファイルパス:行番号` 付きで標準エラー出力へ出し、警告が1件でもあるときは終了コード1で終わる。このとき標準出力には、警告の無かったレコードから取り出せた分だけが出る（出力は不完全になり得る）。ファイルやディレクトリの読み取りに失敗したときの警告だけは行番号を持たず、`パス: メッセージ` の形式で出る。
 
 ### 出力（登録スクリプトへの受け渡し形式）
 
-標準出力へ、UTF-8・LF・1行1セッションのJSONL（`JSON.stringify` のコンパクト形式、末尾改行）で出す。各発言の出典と物理行番号を保持する。原文に個人情報や機密が含まれ得るため、登録前に内容を確認し保存先（01か04か）を判断する。
+標準出力へ、UTF-8・LF・1行1セッションのJSONL（`JSON.stringify` のコンパクト形式、末尾改行）で出す。各発言の出典と物理行番号を保持する。原文に個人情報や機密が含まれ得るため、公開前に内容を確認し、必要に応じて機密情報ルールに従う。
 
 ```json
-{"source":"codex","session_id":"…またはnull","prompts":[{"timestamp":"…またはnull","prompt":"原文の逐語","source_file":"…","record_line":42}]}
+{"source":"codex","session_id":"…またはnull","messages":[{"role":"user","timestamp":"…またはnull","text":"原文の逐語","source_file":"…","record_line":42}]}
 ```
 
 セッション形式のフィールド:
@@ -278,11 +278,12 @@ Codexのレコードは次のように分類する。
 |-----------|------|
 | `source` | `claude` または `codex` |
 | `session_id` | セッションID。取得できない場合は `null` |
-| `prompts` | セッション内のユーザー発言の配列 |
-| `prompts[].timestamp` | レコードの `timestamp` をそのまま保持。無い場合は `null` |
-| `prompts[].prompt` | 発言原文。変換・要約・整形をしない |
-| `prompts[].source_file` | ソースファイルの絶対パス |
-| `prompts[].record_line` | ソースファイル内の物理行番号（1始まり） |
+| `messages` | セッション内のユーザー・アシスタント可視発言の配列 |
+| `messages[].role` | `user` または `assistant` |
+| `messages[].timestamp` | レコードの `timestamp` をそのまま保持。無い場合は `null` |
+| `messages[].text` | 発言原文。変換・要約・整形をしない |
+| `messages[].source_file` | ソースファイルの絶対パス |
+| `messages[].record_line` | ソースファイル内の物理行番号（1始まり） |
 
 `--per-prompt` の場合は、発言単位で次の形式を出力する。
 
@@ -299,7 +300,7 @@ Codexのレコードは次のように分類する。
 | `source_file` | ソースファイルの絶対パス |
 | `record_line` | ソースファイル内の物理行番号（1始まり。無視種の行も数える） |
 
-- 出力順: claudeのファイル群（ソース相対パス順）→ codexのファイル群（同）、ファイル内は行順。この順序は決定的である。セッション内の発言はタイムスタンプ順、セッションの出力順は最初に現れた順。
+- 出力順: claudeのファイル群（ソース相対パス順）→ codexのファイル群（同）、ファイル内は行順。この順序は決定的である。セッション内の発言はタイムスタンプ順、セッションの出力順は最初に現れた順。ユーザー発言を含まないセッションは除外する。
 - 抽出が0件のときは標準出力を空にし、標準エラー出力に注記する。終了コード0は警告が1件も無いときに限る。警告があるときは、注記と警告を出して終了コード1で終わる。
 
 ### 失敗時の挙動
@@ -315,25 +316,23 @@ Codexのレコードは次のように分類する。
 
 - ツールのバージョン更新によるレコード形式の変化。本節の分類は2026-10-03時点の実機データに基づく。契約外の形式は警告で表面化するため、警告が出たときは本節の分類と照らし合わせる。
 
-## register-ai-prompt-session.mjs — セッション記録の登録
+## register-ai-prompt-session.mjs — 会話履歴の登録
 
-取得JSONLの1行（1セッション）を、発言の時系列と各原文・ソースファイル・行番号を保ったMarkdownへ登録する。既定は `04-materials/prompts/`、機密情報や公開可否が不明な個人情報を含む場合は `--secret` を指定して `01-secret/prompts/` へ保存する。
+取得JSONLの各セッションを、発言者・時刻・原文のみのMarkdownとして登録する。1セッション1ファイルで、既定は `04-materials/prompts/`、機密情報などを含む場合は `--secret` で `01-secret/prompts/` へ保存する。`--batch` はJSONLの全行をまとめて登録する。
 
 ```console
-umask 077 && node scripts/fetch-ai-prompts.mjs --since 2026-10-01 --until 2026-10-10 > /tmp/prompt-sessions.jsonl
-node scripts/register-ai-prompt-session.mjs --title "作業指示の傾向" --file /tmp/one-session.json
+umask 077 && node scripts/fetch-ai-prompts.mjs > /tmp/ai-conversations.jsonl
+node scripts/register-ai-prompt-session.mjs --batch --file /tmp/ai-conversations.jsonl
 ```
 
-登録前にセッション本文を確認して対象を選ぶ。1セッションずつ登録するときは対象行をJSONファイルへ取り出して `--file` で渡す。`--title` は必須、`--date` は任意（省略時は最初の発言日、日付が無ければ当日）、`--root` は任意。記録にはソースファイルのbasenameと行番号を残し、ローカル絶対パスは含めない。既存ファイルは上書きしない。
+本文は役割ラベル、時刻、会話テキストで構成し、要約や分析を加えない。ファイル名には日付・取得元・セッションIDを使う。既存ファイルは上書きしない。公開前に機密情報や個人情報を確認する。
 
 ## Claude/Codexの収集から指摘傾向の分析まで
 
-1. `fetch-ai-prompts.mjs` で対象期間をセッション単位で収集する。
-2. JSONLをセッションごとに確認し、分析に使うものを選ぶ。機密情報や公開可否が不明な個人情報は `--secret` で01へ保存する。
-3. 公開可能なセッションを `register-ai-prompt-session.mjs` で04へ保存する。
-4. [プロンプト傾向分析スキル](../agents/skills/prompt-trend-analysis/SKILL.md)に従い、ユーザー発言だけの収集結果から指摘候補を探す。元セッションを開き、先行する依頼と直前の応答を確認して、タスク依頼と成果物への指摘を分ける。
-5. 1セッションを最大1件として、単発と反復を分け、ユーザーの明示内容・分析者の解釈・未確認事項を区別して出典付きで記録する。
-6. 反復が確認できた再利用可能な知識は02へ整理する。Ruleへ反映するのは常時適用する意思が明示された場合に限る。
+1. `fetch-ai-prompts.mjs` でユーザー・アシスタントの可視会話をセッション単位で収集する。
+2. `register-ai-prompt-session.mjs --batch` で各セッション全文を04へ保存する。04には会話原文以外を置かない。
+3. [プロンプト傾向分析スキル](../agents/skills/prompt-trend-analysis/SKILL.md)に従い、全文記録から指摘候補を探す。元セッションの前後関係を確認し、タスク依頼と成果物への指摘を分ける。
+4. 分析レポートは03へ置き、検証済みで再利用できる知識だけを02へ整理する。Ruleへ反映するのは常時適用する意思が明示された場合に限る。
 ## filter-related-knowledge.test.mjs — SKILL.md のリンク検査
 
 - 目的: `agents/skills/filter-related-knowledge/SKILL.md` のリンク契約検査。出典リンクの存在、相対リンク参照先の実在、相対リンクが通常検索の除外対象を参照しないことを確認する。

@@ -132,7 +132,7 @@ function snapshotFiles(root) {
   return files;
 }
 
-test('既定ではclaudeとcodexのユーザー入力をセッション単位にまとめる', (t) => {
+test('既定ではclaudeとcodexの可視会話をセッション単位にまとめる', (t) => {
   const root = newTempRoot(t);
   const { claudeDir, codexDir, claudeFile, codexFile } = writeMainFixture(root);
   const result = runCli(['--claude-dir', claudeDir, '--codex-dir', codexDir], { perPrompt: false });
@@ -141,19 +141,21 @@ test('既定ではclaudeとcodexのユーザー入力をセッション単位に
   assert.equal(result.stderr, '');
   assert.deepEqual(outputEntries(result.stdout), [
     {
-      source: 'claude', session_id: 'claude-session-0001', prompts: [
-        { timestamp: CLAUDE_TS, prompt: 'まず既存コードを読む', source_file: claudeFile, record_line: 2 },
+      source: 'claude', session_id: 'claude-session-0001', messages: [
+        { role: 'user', timestamp: CLAUDE_TS, text: 'まず既存コードを読む', source_file: claudeFile, record_line: 2 },
+        { role: 'assistant', timestamp: CLAUDE_TS, text: '確認しました', source_file: claudeFile, record_line: 3 },
       ],
     },
     {
-      source: 'claude', session_id: 'claude-session-0002', prompts: [
-        { timestamp: '2026-09-29T11:00:00.000Z', prompt: '1行目: 命名は既存に合わせる\n```bash\necho サンプル\n```\n2つ目のブロック', source_file: claudeFile, record_line: 6 },
-        { timestamp: null, prompt: 'タイムスタンプの無い入力', source_file: claudeFile, record_line: 7 },
+      source: 'claude', session_id: 'claude-session-0002', messages: [
+        { role: 'user', timestamp: '2026-09-29T11:00:00.000Z', text: '1行目: 命名は既存に合わせる\n```bash\necho サンプル\n```\n2つ目のブロック', source_file: claudeFile, record_line: 6 },
+        { role: 'user', timestamp: null, text: 'タイムスタンプの無い入力', source_file: claudeFile, record_line: 7 },
       ],
     },
     {
-      source: 'codex', session_id: 'codex-session-0001', prompts: [
-        { timestamp: '2026-09-29T09:00:10.000Z', prompt: '命名は既存に合わせる\n根拠: 既存の命名規約\nテストは観測点を固定する', source_file: codexFile, record_line: 2 },
+      source: 'codex', session_id: 'codex-session-0001', messages: [
+        { role: 'user', timestamp: '2026-09-29T09:00:10.000Z', text: '命名は既存に合わせる\n根拠: 既存の命名規約\nテストは観測点を固定する', source_file: codexFile, record_line: 2 },
+        { role: 'assistant', timestamp: '2026-09-29T09:00:20.000Z', text: '既存に合わせます', source_file: codexFile, record_line: 3 },
       ],
     },
   ]);

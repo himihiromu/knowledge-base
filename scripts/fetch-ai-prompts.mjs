@@ -1,4 +1,4 @@
-// Claude・Codexのローカルセッション保存からユーザー入力を抽出し、発言単位またはセッション単位のJSONLで標準出力へ出力する読み取り専用スクリプト。
+// Claude・Codexのローカルセッション保存からユーザーとアシスタントの可視会話を抽出し、セッション単位のJSONLで標準出力へ出力する読み取り専用スクリプト。
 // 入力レコード契約・受け渡し形式・終了コードは scripts/README.md の fetch-ai-prompts.mjs の節に記録する。
 import { readdirSync, readFileSync, statSync } from 'node:fs';
 import { homedir } from 'node:os';
@@ -21,14 +21,14 @@ const DATE_FLAGS = new Map([['--since', 'since'], ['--until', 'until']]);
 
 const USAGE = `使い方: node scripts/fetch-ai-prompts.mjs [--claude-dir DIR] [--codex-dir DIR] [--since YYYY-MM-DD] [--until YYYY-MM-DD] [--per-prompt]
 
-Claude・Codexのローカルセッション保存からユーザー入力のプロンプトを抽出し、原文と出典を保持するJSONLを標準出力へ出力する。読み取り専用で、どのファイルも変更しない。
+Claude・Codexのローカルセッション保存からユーザーとアシスタントの可視テキストを抽出し、セッションごとの全会話をJSONLで標準出力へ出力する。読み取り専用で、どのファイルも変更しない。内部推論、ツール呼び出し、ツール結果、システム情報は会話本文に含めない。
 
 オプション:
   --claude-dir DIR    Claudeのセッション保存ディレクトリ（既定: ~/.claude/projects）
   --codex-dir DIR     Codexのセッション保存ディレクトリ（既定: ~/.codex/sessions）
   --since YYYY-MM-DD  抽出する期間の開始日（その日を含む）
   --until YYYY-MM-DD  抽出する期間の終了日（その日を含む）
-  --per-prompt        セッション単位ではなく、ユーザー発言ごとにJSONLへ出力する
+  --per-prompt        セッション単位ではなく、ユーザー発言ごとにJSONLへ出力する（従来形式）
   --help              この使い方を表示する
 
 終了コード: 0=完了、1=データ問題（警告があり、出力は不完全になり得る）、2=使い方・環境エラー`;
@@ -163,11 +163,11 @@ function joinTextBlocks(blocks, blockType) {
 
 function classifyClaudeRecord(record) {
   if (record === null || typeof record !== 'object') return { action: 'unknown', reason: 'オブジェクトではないJSONレコードです' };
-  if (record.type === 'user') {
+  if (record.type === 'user' || record.type === 'assistant') {
     if (record.isSidechain === true) return { action: 'ignore' };
     const message = record.message;
-    if (message === null || typeof message !== 'object' || message.role !== 'user') {
-      return { action: 'unknown', reason: 'userレコードに message.role=user がありません' };
+    if (message === null || typeof message !== 'object' || message.role !== record.type) {
+      return { action: 'unknown', reason: `${record.type}レコードに message.role=${record.type} がありません` };
     }
     let prompt;
     if (typeof message.content === 'string') {
@@ -175,13 +175,13 @@ function classifyClaudeRecord(record) {
     } else if (Array.isArray(message.content)) {
       const joined = joinTextBlocks(message.content, 'text');
       if (joined.problem !== undefined) return { action: 'unknown', reason: joined.problem };
-      // textブロックを持たない user レコード（tool_resultのみ等）はユーザー入力ではない
+      // textブロックを持たない user/assistant レコード（tool_result、tool_useのみ等）は可視会話ではない
       if (joined.text === null) return { action: 'ignore' };
       prompt = joined.text;
     } else {
       return { action: 'unknown', reason: 'userレコードの message.content が文字列でも配列でもありません' };
     }
-    return { action: 'extract', prompt, timestamp: optionalString(record.timestamp), sessionId: optionalString(record.sessionId) };
+    return { action: 'extract', role: record.type, prompt, timestamp: optionalString(record.timestamp), sessionId: optionalString(record.sessionId) };
   }
   if (CLAUDE_IGNORED_TYPES.has(record.type)) return { action: 'ignore' };
   return { action: 'unknown', reason: `契約外のレコード種 type=${String(record.type)}` };
@@ -226,14 +226,16 @@ function classifyCodexRecord(record, sessionId) {
       if (CODEX_IGNORED_PAYLOAD_TYPES.has(payload.type)) return { action: 'ignore' };
       return { action: 'unknown', reason: `契約外の payload.type=${String(payload.type)}` };
     }
-    // assistant・developerなどのユーザー以外の発言は入力プロンプトではない
-    if (payload.role !== 'user') return { action: 'ignore' };
+    if (!['user', 'assistant'].includes(payload.role)) return { action: 'ignore' };
     if (!Array.isArray(payload.content)) return { action: 'unknown', reason: 'ユーザーメッセージの payload.content が配列ではありません' };
-    const joined = joinTextBlocks(payload.content, 'input_text');
+    // Codexの内部推論・進捗注釈は会話履歴ではなく、ユーザーに提示された最終応答だけを残す。
+    if (payload.role === 'assistant' && payload.phase !== undefined && !['final', 'commentary'].includes(payload.phase)) return { action: 'ignore' };
+    const blockType = payload.role === 'user' ? 'input_text' : 'output_text';
+    const joined = joinTextBlocks(payload.content, blockType);
     if (joined.problem !== undefined) return { action: 'unknown', reason: joined.problem };
-    // input_textを持たないユーザーメッセージは入力テキストとして扱わない
+    // 対応する可視テキストを持たないメッセージ（ツール専用等）は会話本文として扱わない
     if (joined.text === null) return { action: 'ignore' };
-    return { action: 'extract', prompt: joined.text, timestamp: optionalString(record.timestamp), sessionId };
+    return { action: 'extract', role: payload.role, prompt: joined.text, timestamp: optionalString(record.timestamp), sessionId };
   }
   if (CODEX_IGNORED_TYPES.has(record.type)) return { action: 'ignore' };
   return { action: 'unknown', reason: `契約外のレコード種 type=${String(record.type)}` };
@@ -262,8 +264,9 @@ function appendExtractedEntry(entries, source, file, lineNumber, classified) {
   entries.push({
     source,
     session_id: classified.sessionId,
+    role: classified.role,
     timestamp: classified.timestamp,
-    prompt: classified.prompt,
+    text: classified.prompt,
     source_file: file,
     record_line: lineNumber,
   });
@@ -317,12 +320,13 @@ function groupEntriesBySession(entries) {
     const key = sessionKey(entry);
     let session = sessions.get(key);
     if (session === undefined) {
-      session = { source: entry.source, session_id: entry.session_id, prompts: [] };
+      session = { source: entry.source, session_id: entry.session_id, messages: [] };
       sessions.set(key, session);
     }
-    session.prompts.push({
+    session.messages.push({
+      role: entry.role,
       timestamp: entry.timestamp,
-      prompt: entry.prompt,
+      text: entry.text,
       source_file: entry.source_file,
       record_line: entry.record_line,
     });
@@ -330,7 +334,7 @@ function groupEntriesBySession(entries) {
 
   return [...sessions.values()].map((session) => ({
     ...session,
-    prompts: session.prompts.sort((left, right) => {
+    messages: session.messages.sort((left, right) => {
       if (left.timestamp !== null && right.timestamp !== null && left.timestamp !== right.timestamp) {
         return left.timestamp < right.timestamp ? -1 : 1;
       }
@@ -379,7 +383,9 @@ function runCli() {
   const entries = !options.perPrompt && hasDateFilter
     ? includeFullMatchingSessions(collectedEntries, options, warnings)
     : filterEntries(collectedEntries, options, warnings);
-  const outputEntries = options.perPrompt ? entries : groupEntriesBySession(entries);
+  const outputEntries = options.perPrompt
+    ? entries.filter((entry) => entry.role === 'user').map(({ role, text, ...entry }) => ({ ...entry, prompt: text }))
+    : groupEntriesBySession(entries).filter((session) => session.messages.some((message) => message.role === 'user'));
   writeEntries(outputEntries);
   if (entries.length === 0) process.stderr.write('出力対象のプロンプトが0件でした。\n');
   if (warnings.length > 0) {
