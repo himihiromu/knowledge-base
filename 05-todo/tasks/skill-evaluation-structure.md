@@ -1,7 +1,7 @@
 # スキルの機械テストと評価ケースの境界を明確にする
 
-- 状態: 未着手
-- 確認日: 2026-10-04
+- 状態: 完了
+- 確認日: 2026-10-10
 - 出典: 同日のリポジトリ調査。スキルのリンク契約を確認するNodeテスト、評価手順・ケース・サンプル、および `03-output/skill-evaluation/` の評価記録が並存していることを確認。
 
 ## 目的
@@ -17,25 +17,25 @@
 
 ## 完了条件
 
-- [ ] 機械テストと人による評価の範囲が明確に定義されている。
-- [ ] ケース、サンプル、評価記録の配置規則が明記されている。
-- [ ] 現行のケース・サンプル・テスト・結果の配置について結論と変更要否が記録されている。
-- [ ] 関連文書とリンクが規則に一致している。
+- [x] 機械テストと人による評価の範囲が明確に定義されている。
+- [x] ケース、サンプル、評価記録の配置規則が明記されている。
+- [x] 現行のケース・サンプル・テスト・結果の配置について結論と変更要否が記録されている。
+- [x] 関連文書とリンクが規則に一致している。
 
 ## 次の行動
 
-- [ ] 現行ファイルを役割ごとに分類し、移動が必要なファイルを特定する。
+- [x] 現行ファイルを役割ごとに分類し、移動が必要なファイルを特定する。
 
 ## 成果物・検証結果
 
-- 成果物:
-- 検証:
+- 成果物: `agents/skills/skill-evaluation/SKILL.md`、`agents/skills/README.md`、`03-output/skill-evaluation/README.md`。
+- 検証: ケースとサンプルは `agents/skills/skill-evaluation/cases/example/`、結果は `03-output/skill-evaluation/` にあることを確認。ケースとサンプルは評価手順が所有するため移動不要。Nodeテスト `scripts/test/filter-related-knowledge.test.mjs` は `agents/skills/filter-related-knowledge/SKILL.md` のリンク契約を検査するもので、評価結果の採点とは別の役割。order.md の指示に従いテストは追加・実行していない。
 
 ## 関連タスク・資料
 
 - [テストの配置・命名・一括実行方法を統一する](test-conventions.md)
 - [タスク成果物の配置・構造ルールを整備する](artifact-structure-rules.md)
 
-## 未確認事項
+## 調査結果
 
-- ケースやサンプルを `agents/skills/` に保つか、共通のテスト領域へ移すかは未決定。
+- `scripts/test/filter-related-knowledge.test.mjs` は `filter-related-knowledge/SKILL.md` のリンク契約を検査する。評価用ケースの出力採点とは別契約で、配置変更不要。

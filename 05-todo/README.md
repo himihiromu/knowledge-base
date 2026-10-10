@@ -17,7 +17,6 @@
 
 - [ ] [タスク成果物の配置・構造ルールを整備する](tasks/artifact-structure-rules.md)
 - [ ] [テストの配置・命名・一括実行方法を統一する](tasks/test-conventions.md)
-- [ ] [スキルの機械テストと評価ケースの境界を明確にする](tasks/skill-evaluation-structure.md)
 - [ ] [既存スキル文書とTODOの状態・記載を整合させる](tasks/skill-docs-and-status.md)
 - [ ] [AIとのプロンプトの傾向分析スキルを追加する](tasks/prompt-trend-analysis.md)
 
@@ -46,6 +45,7 @@
 - [機械判定可能なナレッジ品質検証をCIへ分離](tasks/knowledge-quality-ci.md)
 - [作業修正時の原因特定・変更箇所判断スキル](tasks/correction-analysis-skill.md)
 - [スキル評価用テスト機構](tasks/skill-evaluation.md)
+- [スキルの機械テストと評価ケースの境界を明確にする](tasks/skill-evaluation-structure.md)
 
 ## 別リポジトリの開発
 
