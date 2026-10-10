@@ -225,16 +225,19 @@ bash、GNU coreutils（`mktemp`、`mkdir`、`rm`、`sha256sum`、`wc`、`tail`�
 
 ### 目的
 
-Claude CodeとCodexのローカルセッション保存から、ユーザーが入力したプロンプトを原文（逐語）と出典付きで抽出し、JSONLとして標準出力へ渡す。取得のみを行い、リポジトリと保存先への書き込みはしない。出力をリポジトリへ登録する処理は、この出力を入力とする別TODOの登録スクリプトが担う。
+Claude CodeとCodexのローカルセッション保存から、ユーザーが入力したプロンプトを原文（逐語）と出典付きで抽出し、JSONLとして標準出力へ渡す。既定ではセッション単位、`--per-prompt` では発言単位で出力する。取得のみを行い、リポジトリと保存先への書き込みはしない。
 
 ### 実行方法
 
 ```console
-node scripts/fetch-ai-prompts.mjs [--claude-dir DIR] [--codex-dir DIR] [--since YYYY-MM-DD] [--until YYYY-MM-DD]
+node scripts/fetch-ai-prompts.mjs [--claude-dir DIR] [--codex-dir DIR] [--since YYYY-MM-DD] [--until YYYY-MM-DD] [--per-prompt]
 ```
 
 - `--claude-dir`（既定 `~/.claude/projects`）と `--codex-dir`（既定 `~/.codex/sessions`）で保存先を差し替える。確認スイートは一時ディレクトリを渡す。
 - `--since`・`--until` は抽出する期間の開始日・終了日。どちらもその日を含み、タイムスタンプ先頭の `YYYY-MM-DD` で比較する。省略した場合は期間で絞り込まない。フィルタを使うとき、タイムスタンプを持たないレコードや先頭が `YYYY-MM-DD` で始まらないタイムスタンプのレコードは出力せず、`ファイルパス:行番号` 付きの警告の対象になる（終了コード1）。フィルタが無いときは、タイムスタンプを持たないレコードも `timestamp` が `null` のまま出力される。
+- 既定ではユーザー発言をセッションごとにまとめて1行1セッションのJSONLで出力する。日付フィルタは該当発言のあるセッションを選び、そのセッションの期間外の発言も文脈として含める。
+- セッション形式はアシスタントの返答を含まず、ユーザー発言だけを時系列で保持する。`session_id` が取得できない発言はソースファイルごとにまとめる。
+- `--per-prompt` を指定すると、従来どおり1発言1行のJSONLを出力する。
 - `--help` で使い方を表示する。
 - 終了コード: 0=完了、1=データ問題（警告があり、出力は不完全になり得る）、2=使い方・環境エラー。
 
@@ -263,7 +266,25 @@ Codexのレコードは次のように分類する。
 
 ### 出力（登録スクリプトへの受け渡し形式）
 
-標準出力へ、UTF-8・LF・1行1エントリのJSONL（`JSON.stringify` のコンパクト形式、末尾改行）で出す。この形式が別TODOの登録スクリプトの入力契約であり、変更するときは登録側と同じ変更で更新する。原文に個人情報や機密が含まれ得るため、出力の取り扱いと保存先（01か04か）の判断は登録側にある。
+標準出力へ、UTF-8・LF・1行1セッションのJSONL（`JSON.stringify` のコンパクト形式、末尾改行）で出す。各発言の出典と物理行番号を保持する。原文に個人情報や機密が含まれ得るため、登録前に内容を確認し保存先（01か04か）を判断する。
+
+```json
+{"source":"codex","session_id":"…またはnull","prompts":[{"timestamp":"…またはnull","prompt":"原文の逐語","source_file":"…","record_line":42}]}
+```
+
+セッション形式のフィールド:
+
+| フィールド | 内容 |
+|-----------|------|
+| `source` | `claude` または `codex` |
+| `session_id` | セッションID。取得できない場合は `null` |
+| `prompts` | セッション内のユーザー発言の配列 |
+| `prompts[].timestamp` | レコードの `timestamp` をそのまま保持。無い場合は `null` |
+| `prompts[].prompt` | 発言原文。変換・要約・整形をしない |
+| `prompts[].source_file` | ソースファイルの絶対パス |
+| `prompts[].record_line` | ソースファイル内の物理行番号（1始まり） |
+
+`--per-prompt` の場合は、発言単位で次の形式を出力する。
 
 ```json
 {"source":"claude","session_id":"…またはnull","timestamp":"…またはnull","prompt":"原文の逐語","source_file":"…","record_line":42}
@@ -272,13 +293,13 @@ Codexのレコードは次のように分類する。
 | フィールド | 内容 |
 |-----------|------|
 | `source` | `claude` または `codex` |
-| `session_id` | Claudeはレコードの `sessionId`、Codexはそのレコードより前に現れた最後の `session_meta` の `payload.id`（実機データでは `payload.session_id` と同値）。文字列として取れない場合は `null` |
-| `timestamp` | レコードの `timestamp` を正規化せずそのまま。無い場合は `null` |
-| `prompt` | プロンプト原文。変換・要約・整形をしない |
+| `session_id` | Claudeはレコードの `sessionId`、Codexはそのレコードより前に現れた最後の `session_meta` の `payload.id`。文字列として取れない場合は `null` |
+| `timestamp` | レコードの `timestamp` をそのまま保持。無い場合は `null` |
+| `prompt` | 発言原文。変換・要約・整形をしない |
 | `source_file` | ソースファイルの絶対パス |
 | `record_line` | ソースファイル内の物理行番号（1始まり。無視種の行も数える） |
 
-- 出力順: claudeのファイル群（ソース相対パス順）→ codexのファイル群（同）、ファイル内は行順。この順序は決定的である。
+- 出力順: claudeのファイル群（ソース相対パス順）→ codexのファイル群（同）、ファイル内は行順。この順序は決定的である。セッション内の発言はタイムスタンプ順、セッションの出力順は最初に現れた順。
 - 抽出が0件のときは標準出力を空にし、標準エラー出力に注記する。終了コード0は警告が1件も無いときに限る。警告があるときは、注記と警告を出して終了コード1で終わる。
 
 ### 失敗時の挙動
@@ -293,6 +314,25 @@ Codexのレコードは次のように分類する。
 ### 未確認事項
 
 - ツールのバージョン更新によるレコード形式の変化。本節の分類は2026-10-03時点の実機データに基づく。契約外の形式は警告で表面化するため、警告が出たときは本節の分類と照らし合わせる。
+
+## register-ai-prompt-session.mjs — セッション記録の登録
+
+取得JSONLの1行（1セッション）を、発言の時系列と各原文・ソースファイル・行番号を保ったMarkdownへ登録する。既定は `04-materials/prompts/`、機密情報や公開可否が不明な個人情報を含む場合は `--secret` を指定して `01-secret/prompts/` へ保存する。
+
+```console
+umask 077 && node scripts/fetch-ai-prompts.mjs --since 2026-10-01 --until 2026-10-10 > /tmp/prompt-sessions.jsonl
+node scripts/register-ai-prompt-session.mjs --title "作業指示の傾向" --file /tmp/one-session.json
+```
+
+登録前にセッション本文を確認して対象を選ぶ。1セッションずつ登録するときは対象行をJSONファイルへ取り出して `--file` で渡す。`--title` は必須、`--date` は任意（省略時は最初の発言日、日付が無ければ当日）、`--root` は任意。記録にはソースファイルのbasenameと行番号を残し、ローカル絶対パスは含めない。既存ファイルは上書きしない。
+
+## Claude/Codexの収集から傾向分析まで
+
+1. `fetch-ai-prompts.mjs` で対象期間をセッション単位で収集する。
+2. JSONLをセッションごとに確認し、分析に使うものを選ぶ。機密情報や公開可否が不明な個人情報は `--secret` で01へ保存する。
+3. 公開可能なセッションを `register-ai-prompt-session.mjs` で04へ保存する。
+4. [プロンプト傾向分析スキル](../agents/skills/prompt-trend-analysis/SKILL.md)に従い、04の記録を比較して単発と反復を分け、出典リンク付きで分析結果を記録する。
+5. 反復が確認できた再利用可能な知識は02へ整理する。Ruleへ反映するのは常時適用する意思が明示された場合に限る。
 ## filter-related-knowledge.test.mjs — SKILL.md のリンク検査
 
 - 目的: `agents/skills/filter-related-knowledge/SKILL.md` のリンク契約検査。出典リンクの存在、相対リンク参照先の実在、相対リンクが通常検索の除外対象を参照しないことを確認する。

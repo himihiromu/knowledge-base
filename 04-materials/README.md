@@ -4,6 +4,7 @@
 出典と取得・確認日を残し、元資料の内容と自分の感想を区別する。確認できない本文を推測で要約しない。
 未整理のメモは[inbox](inbox/README.md)へ。整理した知識は[02-knowledge](../02-knowledge/README.md)へ。
 AIとのプロンプトの記録は[prompts](prompts/README.md)へ。
+2026-10-10のプロンプト傾向分析は[分析記録](prompt-trend-analysis-2026-10-10.md)を参照。
 大容量の実体は[06-storage](../06-storage/README.md)に置き、ここから参照する。
 
 - [ナレッジベース作成のきっかけ](2026-09-29-personal-knowledge-base.md)
