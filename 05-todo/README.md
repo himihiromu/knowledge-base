@@ -18,7 +18,6 @@
 - [ ] [タスク成果物の配置・構造ルールを整備する](tasks/artifact-structure-rules.md)
 - [ ] [テストの配置・命名・一括実行方法を統一する](tasks/test-conventions.md)
 - [ ] [スキルの機械テストと評価ケースの境界を明確にする](tasks/skill-evaluation-structure.md)
-- [ ] [既存スキル文書とTODOの状態・記載を整合させる](tasks/skill-docs-and-status.md)
 - [ ] [スキル評価をエージェントで自動実行する](tasks/skill-evaluation-runner.md)
 
 ### 検査・開発環境
@@ -31,7 +30,6 @@
 ### ナレッジ運用
 
 - [ ] [プロンプト内容のナレッジ化手順を定義する](tasks/prompt-knowledge-skill.md)
-- [ ] [コミット前ナレッジ検査スキルを整備する](tasks/committed-knowledge-skill.md)
 - [ ] [プロンプトの取得・登録を定期実行する](tasks/scheduled-prompt-fetch.md)
 
 ### 作業・タスク管理
@@ -61,6 +59,8 @@
 - [機械判定可能なナレッジ品質検証をCIへ分離](tasks/knowledge-quality-ci.md)
 - [作業修正時の原因特定・変更箇所判断スキル](tasks/correction-analysis-skill.md)
 - [スキル評価用テスト機構](tasks/skill-evaluation.md)
+- [既存スキル文書とTODOの状態・記載を整合させる](tasks/skill-docs-and-status.md)
+- [コミット前ナレッジ検査スキルを整備する](tasks/committed-knowledge-skill.md)
 
 ## 別リポジトリの開発
 
