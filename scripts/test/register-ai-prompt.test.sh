@@ -1,12 +1,12 @@
 #!/usr/bin/env bash
-# scripts/register-ai-prompt.sh の確認スイート。実行方法: bash scripts/register-ai-prompt-test.sh
+# scripts/register-ai-prompt.sh の確認スイート。実行方法: bash scripts/test/register-ai-prompt.test.sh
 # 対象スクリプトの入力・出力・保存形式は scripts/README.md に記録する。
 # --root を一時ディレクトリへ渡すため、リポジトリ実物の 04-materials と 01-secret は書き換えない。
 # 本文は架空のサンプルのみを使い、実データを混ぜない。
 # 日付は再現性のため --date で常に明示し、当日日付の省略経路は観測しない。
 set -uo pipefail
 
-SCRIPT_DIR=$(cd "$(dirname "$0")" && pwd)
+SCRIPT_DIR=$(cd "$(dirname "$0")/.." && pwd)
 TARGET="$SCRIPT_DIR/register-ai-prompt.sh"
 SAVE_TARGET="$SCRIPT_DIR/save-ai-prompt.sh"
 
@@ -458,10 +458,7 @@ test_r4_f1() {
   root=$(new_root 'f1')
   shim_dir="$tmp_base/f1-shim"
   mkdir -p "$shim_dir"
-  cat >"$shim_dir/mv" <<'SHIM'
-#!/usr/bin/env bash
-exit 1
-SHIM
+  printf '#!%s\nexit 1\n' "$BASH" >"$shim_dir/mv"
   chmod +x "$shim_dir/mv"
   saved_path=$PATH
   PATH="$shim_dir:$PATH"
@@ -508,7 +505,7 @@ test_r4_p2() {
   mkdir -p "$shim_dir"
   real_mv=$(command -v mv)
   cat >"$shim_dir/mv" <<SHIM
-#!/usr/bin/env bash
+#!$BASH
 if [ "\$2" = "$record" ]; then sleep 1; fi
 exec "$real_mv" "\$@"
 SHIM
@@ -539,7 +536,7 @@ test_r4_p3() {
   mkdir -p "$shim_dir"
   real_mv=$(command -v mv)
   cat >"$shim_dir/mv" <<SHIM
-#!/usr/bin/env bash
+#!$BASH
 if [ "\$2" = "$record" ]; then sleep 1; fi
 exec "$real_mv" "\$@"
 SHIM

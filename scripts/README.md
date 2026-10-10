@@ -1,5 +1,48 @@
 # スクリプト
 
+## テストの配置・実行
+
+テストは `scripts/test/` に置き、対象名に `.test` と実行環境の拡張子を続けて命名する。Node.js テストは `*.test.mjs`、bash テストは `*.test.sh` とする。Node.js は機械的な入力・出力契約の検査を担い、bash は対象シェルスクリプトを一時ディレクトリで実行する統合確認を担う。
+
+全テストの標準入口は、リポジトリルートから実行する次のコマンドである。
+
+```console
+nix run path:.#test
+```
+
+flake は Node.js 24 と bash、および各テストが使う GNU coreutils、diffutils、findutils、grep、sed、util-linux を固定した nixpkgs revision から提供する。各スイートは個別に実行し、失敗があっても後続スイートを実行する。最後にいずれかの失敗を非ゼロ終了コードで返す。
+
+補助入口として、flake check は同じ全スイートを実行し、development shell からは `nix develop -c run-all-tests` で実行できる。
+
+### 個別実行
+
+Node.js テストは Node.js 24 で実行する。現在の CI と同じ全 Node.js テストのコマンドは次のとおり。
+
+```console
+node --test 'scripts/test/*.test.mjs'
+```
+
+個別の Node.js テストは次のとおり。
+
+```console
+node --test scripts/test/check-knowledge-diff.test.mjs
+node --test scripts/test/check-knowledge-quality.test.mjs
+node --test scripts/test/fetch-ai-prompts.test.mjs
+node --test scripts/test/filter-related-knowledge.test.mjs
+node --test scripts/test/test-conventions.test.mjs
+```
+
+bash テストは bash と GNU coreutils、diffutils、findutils、grep、sed、util-linux（`flock`）を使う。
+
+```console
+bash scripts/test/register-ai-prompt.test.sh
+bash scripts/test/save-ai-prompt.test.sh
+```
+
+### CI とローカル専用検査
+
+`.github/workflows/knowledge-quality.yml` は Node.js 24 をセットアップし、`node scripts/check-knowledge-quality.mjs` と `node --test 'scripts/test/*.test.mjs'` を実行する。bash テストと Nix の全テスト入口はローカル実行であり、この workflow では実行しない。CI の対象はこの文書ではなく workflow の定義が正本である。
+
 構造検査、リンク検査、形式変換など、機械的に実施したほうがよいタスクのコードを置く。
 スクリプトを追加するときは、目的・実行方法・依存ツール・変更対象をここに記録する。
 作業全体の判断や手順は[agents/skills](../agents/skills/README.md)にまとめる。
@@ -79,9 +122,9 @@ bash、GNU coreutils（`date`、`tr`、`dirname`、`mkdir`、`mktemp`、`cat`、
 
 ### 登録スクリプトとの排他
 
-`register-ai-prompt.sh` は通常保存時に同じ `04-materials/prompts/` ディレクトリを `flock` する。両スクリプトはロック内で保存先の衝突を確認するため、片方が書き込み中にもう片方が同じ日付・タイトルを登録して上書きすることはない。登録側の排他・再実行・失敗時の一時ファイル掃除は `register-ai-prompt-test.sh` でも確認する。`--secret` の登録は `01-secret/prompts/` を別にロックし、通常保存とは独立している。
+`register-ai-prompt.sh` は通常保存時に同じ `04-materials/prompts/` ディレクトリを `flock` する。両スクリプトはロック内で保存先の衝突を確認するため、片方が書き込み中にもう片方が同じ日付・タイトルを登録して上書きすることはない。登録側の排他・再実行・失敗時の一時ファイル掃除は `scripts/test/register-ai-prompt.test.sh` でも確認する。`--secret` の登録は `01-secret/prompts/` を別にロックし、通常保存とは独立している。
 
-## save-ai-prompt-test.sh — 保存スクリプトの確認
+## scripts/test/save-ai-prompt.test.sh — 保存スクリプトの確認
 
 ### 目的
 
@@ -90,7 +133,7 @@ save-ai-prompt.sh の正常系、保存途中の失敗・中断・再実行、�
 ### 実行方法
 
 ```console
-bash scripts/save-ai-prompt-test.sh
+bash scripts/test/save-ai-prompt.test.sh
 ```
 
 合否は最後の `結果: N 成功 / M 失敗` 行と終了コード（成功 0、失敗 1）で読む。
@@ -199,7 +242,7 @@ bash、GNU coreutils（`date`、`tr`、`dirname`、`mkdir`、`mktemp`、`cat`、
 - `04-materials/prompts/` または `01-secret/prompts/` のディレクトリを `flock` で排他する。通常保存は `save-ai-prompt.sh` と同じディレクトリをロックする。ロックが30秒間取れない場合は非ゼロで終了する。
 - SIGINT・SIGTERM・SIGHUP で一時ファイルを掃除する。SIGKILLでは掃除できないことがあるため、再実行前に `.register-ai-prompt-*` の残留を確認する。置き換え済みの記録は上書きせず、同一日付・タイトルの再登録を拒否する。
 
-## register-ai-prompt-test.sh — 登録スクリプトの確認
+## scripts/test/register-ai-prompt.test.sh — 登録スクリプトの確認
 
 ### 目的
 
@@ -208,7 +251,7 @@ register-ai-prompt.sh の正常系と入力エラー、保存途中の失敗・�
 ### 実行方法
 
 ```console
-bash scripts/register-ai-prompt-test.sh
+bash scripts/test/register-ai-prompt.test.sh
 ```
 
 合否は最後の `結果: N 成功 / M 失敗` 行と終了コード（成功 0、失敗 1）で読む。
