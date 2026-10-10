@@ -35,7 +35,7 @@ AIの作業では、依頼の目的と実際の利用環境に合う成果物、
 - 環境前提の確認: [2026-08-11](../04-materials/prompts/2026-08-11-codex-session-019fefdb-07a4-7b40-b3e8-a887a8c6f543.md)
 - `options.nix`の除外、chezmoiとNixの方針比較、設定追加の理由確認: [2026-08-17](../04-materials/prompts/2026-08-17-codex-session-01a00d14-1da6-7310-b41c-870f7cccf47e.md)
 - 対話入力と設定変更の手間に関する判断: [2026-08-10](../04-materials/prompts/2026-08-10-codex-session-019fec9c-042c-7a82-ba1b-ac3bc530eb41.md)
-- 既存差分の背景を確認してからコミット採否を決める依頼: [2026-08-27](../04-materials/prompts/2026-08-27-codex-session-01a043ff-1c66-72b3-996b-1294b348abc0.md)
+- 既存差分の背景を確認してからコミット採否を決める依頼: [2026-08-27](../04-materials/prompts/2026-08-27-codex-session-01a043ff-1c66-72f2-997a-3a8405f7f4de.md)
 - ComfyUIでの統一が難しければ構成を相談する依頼: [2026-09-25](../04-materials/prompts/2026-09-25-codex-session-01a0d943-f8e4-7bd1-8a11-e91b12d098c0.md)
 - 適合表を先に作り、ユーザーが確定・修正して進める判断: [2026-10-06](../04-materials/prompts/2026-10-06-codex-session-01a110e4-2887-7843-88bd-95296b6f86ea.md)
 - TTYシェルを対象にするよう修正した依頼: [2026-10-07](../04-materials/prompts/2026-10-07-codex-session-01a113c5-18ec-7211-b6dd-0bdf4fb46f05.md)

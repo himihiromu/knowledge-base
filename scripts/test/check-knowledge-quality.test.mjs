@@ -4,8 +4,8 @@ import assert from 'node:assert/strict';
 import { analyzeKnowledgeQuality } from '../check-knowledge-quality.mjs';
 
 // 検査対象は check-knowledge-quality.mjs の純関数 analyzeKnowledgeQuality。
-// 入力は追跡済みファイルの { path, content } の配列。除外パス配下（01-secret/ 06-storage/ 99-trash/ .takt/）の
-// エントリは内容を解析されないが、リンク参照先の存在判定の集合には参加する。
+// 入力は追跡済みファイルの { path, content } の配列。除外パス配下（01-secret/ 06-storage/ 99-trash/ .takt/）と
+// 原文を保持する04-materials/prompts/のエントリは内容を解析されないが、リンク参照先の存在判定には参加する。
 // 索引README・inbox・promptsはorphan・重複・必須メタデータの判定対象から外れる（リンク検査の対象からは外れない）。
 // 出力は { violations, candidates, externalUrls }。violations は機械で確定できる違反、candidates は
 // 人の判断が必要な候補で、候補が違反（終了コード判定）へ混ざることは許されない。
@@ -252,6 +252,29 @@ test('索引README・inbox・promptsはorphan・重複・必須メタデータ�
 
   assert.equal(result.violations.length, 0);
   assert.equal(result.candidates.length, 0);
+});
+
+test('会話履歴の原文に含まれるリンクとコードフェンスは検査せず、参照先としては扱う', () => {
+  const transcript = file('04-materials/prompts/session.md', [
+    '会話中の存在しない参照: [source](../missing.md)',
+    '```markdown',
+    '閉じていないコードフェンス',
+  ].join('\n'));
+  const reader = knowledgeMemo('02-knowledge/transcript-source.md', '[会話履歴](../04-materials/prompts/session.md)');
+  const result = analyzeKnowledgeQuality(withIndex([transcript, reader]));
+
+  assert.equal(result.violations.length, 0);
+  assert.equal(result.candidates.length, 0);
+});
+
+test('会話履歴へのリンク先ファイルが存在しない場合は違反とする', () => {
+  const reader = knowledgeMemo('02-knowledge/transcript-source.md', '[会話履歴](../04-materials/prompts/missing.md)');
+  const result = analyzeKnowledgeQuality(withIndex([reader]));
+
+  const broken = result.violations.filter((finding) => finding.category === '出典リンク切れ');
+  assert.equal(broken.length, 1);
+  assert.equal(broken[0].file, '02-knowledge/transcript-source.md');
+  assert.ok(broken[0].reason.includes('04-materials/prompts/missing.md'));
 });
 
 test('同一の外部URLを複数の内容メモが参照すると重複候補になる', () => {
