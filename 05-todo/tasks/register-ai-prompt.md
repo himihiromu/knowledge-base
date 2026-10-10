@@ -2,7 +2,7 @@
 
 - 状態: 完了
 - 完了日: 2026-10-03
-- 確認日: 2026-10-04
+- 確認日: 2026-10-10
 - 出典: 2026-10-01のユーザー発言。Claude・Codexから取得したプロンプトをこのリポジトリへ格納する依頼。
 
 ## 目的
@@ -23,7 +23,7 @@
 
 ## 成果物・検証結果
 
-- 成果物: [register-ai-prompt.sh](../../scripts/register-ai-prompt.sh)、[スクリプト説明](../../scripts/README.md)
+- 成果物: [register-ai-prompt.sh](../../scripts/register-ai-prompt.sh)、[register-ai-prompt-session.mjs](../../scripts/register-ai-prompt-session.mjs)、[スクリプト説明](../../scripts/README.md)
 - 検証: 2026-10-04時点のmainに実装・テストがあり、後続のatomic化も反映済み。
 
 ## 関連タスク・資料

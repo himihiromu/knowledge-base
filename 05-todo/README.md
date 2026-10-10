@@ -18,7 +18,6 @@
 - [ ] [タスク成果物の配置・構造ルールを整備する](tasks/artifact-structure-rules.md)
 - [ ] [テストの配置・命名・一括実行方法を統一する](tasks/test-conventions.md)
 - [ ] [スキルの機械テストと評価ケースの境界を明確にする](tasks/skill-evaluation-structure.md)
-- [ ] [AIとのプロンプトの傾向分析スキルを追加する](tasks/prompt-trend-analysis.md)
 - [ ] [スキル評価をエージェントで自動実行する](tasks/skill-evaluation-runner.md)
 
 ### 検査・開発環境
@@ -49,6 +48,7 @@
 
 ## 完了タスク
 
+- [AIとのプロンプトの傾向分析スキルを追加する](tasks/prompt-trend-analysis.md)
 - [1タスク1ファイルの管理方法へ移行する](tasks/per-task-todo-management.md)
 - [AIとのプロンプトを保存するスクリプト](tasks/save-ai-prompt.md)
 - [Claude・Codexからプロンプトを取得するスクリプト](tasks/fetch-ai-prompts.md)
