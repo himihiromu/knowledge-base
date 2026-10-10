@@ -1,12 +1,12 @@
 #!/usr/bin/env bash
-# scripts/save-ai-prompt.sh の確認スイート。実行方法: bash scripts/save-ai-prompt-test.sh
+# scripts/save-ai-prompt.sh の確認スイート。実行方法: bash scripts/test/save-ai-prompt.test.sh
 # 対象スクリプトの入力・出力・保存形式は scripts/README.md に記録する。
 # --root を一時ディレクトリへ渡すため、リポジトリ実物の 04-materials と 02-knowledge は書き換えない。
 # 日付は再現性のため --date で常に明示し、当日日付の省略経路は観測しない。
 # SCN-F1/F2/F3/P1/P2 は障害・並列のシナリオ。SCN-F1 の失敗注入は集約先の書き込み権限を落として行うため、root では実行せずスキップする。
 set -uo pipefail
 
-SCRIPT_DIR=$(cd "$(dirname "$0")" && pwd)
+SCRIPT_DIR=$(cd "$(dirname "$0")/.." && pwd)
 TARGET="$SCRIPT_DIR/save-ai-prompt.sh"
 
 if [ ! -f "$TARGET" ]; then
@@ -527,7 +527,7 @@ test_f3() {
   real_mv=$(command -v mv)
   marker="$tmp_base/f3-record-moved"
   cat > "$shim_dir/mv" <<SHIM
-#!/usr/bin/env bash
+#!$BASH
 if [ "\$2" = "$record" ]; then
   "$real_mv" "\$@"
   status=\$?

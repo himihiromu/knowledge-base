@@ -19,10 +19,25 @@
 - [ ] [テストの配置・命名・一括実行方法を統一する](tasks/test-conventions.md)
 - [ ] [スキルの機械テストと評価ケースの境界を明確にする](tasks/skill-evaluation-structure.md)
 - [ ] [AIとのプロンプトの傾向分析スキルを追加する](tasks/prompt-trend-analysis.md)
+- [ ] [スキル評価をエージェントで自動実行する](tasks/skill-evaluation-runner.md)
+
+### 検査・開発環境
+
+- [ ] [シークレットのコミット・pushを防ぐ検査を追加する](tasks/secret-scan.md)
+- [ ] [commit前に検査を自動実行するgit hooksを導入する](tasks/git-hooks.md)
+- [ ] [Markdownのコード表記内のパス参照を検査する](tasks/code-path-reference-check.md)
+- [ ] [よく使う操作をタスクランナーにまとめる](tasks/task-runner.md)
 
 ### ナレッジ運用
 
 - [ ] [プロンプト内容のナレッジ化手順を定義する](tasks/prompt-knowledge-skill.md)
+- [ ] [プロンプトの取得・登録を定期実行する](tasks/scheduled-prompt-fetch.md)
+
+### 作業・タスク管理
+
+- [ ] [作業日報の傾向分析・作成スキルを追加する](tasks/work-report-skills.md)
+- [ ] [TODOの期限・リマインドをOSのリマインダーに登録する](tasks/todo-reminders.md)
+- [ ] [TODO一覧をタスクファイルから自動生成する](tasks/todo-index-generation.md)
 
 ### 長期運用時の健全性
 
