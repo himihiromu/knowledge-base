@@ -1,0 +1,138 @@
+## User — 2026-09-24T00:36:31.936Z
+
+```text
+<recommended_plugins>
+Here is a list of plugins that are available but not installed. If the user's query would benefit from one of these plugins, use the `request_plugin_install` tool to suggest that they install it. Pass the parenthesized ID as `plugin_id`. For example, suggest the Google Drive plugin if the query could possibly be better answered with access to Google Drive.
+
+- Dropbox (app-69b31dc2110c8191b8b47dc98fe5a052@openai-curated-remote)
+- Box (box@openai-curated-remote)
+- Codex Security (codex-security@openai-curated-remote)
+- Figma (figma@openai-curated-remote)
+- GitHub (github@openai-curated-remote)
+- Gmail (gmail@openai-curated-remote)
+- Google Calendar (google-calendar@openai-curated-remote)
+- Google Drive (google-drive@openai-curated-remote)
+- Linear (linear@openai-curated-remote)
+- Notion (notion@openai-curated-remote)
+- OpenAI Developers (openai-developers@openai-curated-remote)
+- Outlook Calendar (outlook-calendar@openai-curated-remote)
+- Outlook Email (outlook-email@openai-curated-remote)
+- SharePoint (sharepoint@openai-curated-remote)
+- Slack (slack@openai-curated-remote)
+- Teams (teams@openai-curated-remote)
+</recommended_plugins>
+<environment_context>
+  <cwd>$HOME/ghq/github.com/himihiromu/takt-worktrees/20260923T2327-tasuku-remotion-ke-konsooruass</cwd>
+  <shell>bash</shell>
+  <current_date>2026-09-24</current_date>
+  <timezone>Asia/Tokyo</timezone>
+  <filesystem><workspace_roots><root>$HOME/ghq/github.com/himihiromu/takt-worktrees/20260923T2327-tasuku-remotion-ke-konsooruass</root></workspace_roots><permission_profile type="managed"><file_system type="restricted"><entry access="read"><special>:root</special></entry></file_system></permission_profile></filesystem>
+</environment_context>
+```
+
+## User — 2026-09-24T00:36:31.938Z
+
+```text
+conductor
+
+
+
+**既にレビューは完了しています。以下のレポートを評価し、どの番号のルール（1始まり）が結果に最も合致するか判定してください。**
+
+
+# technical-validation.md
+
+## Scope
+
+`asset-design.md`を対象に、Remotion APIによる実現可能性、フレーム決定性、大量行の描画性能、TypeScript型安全性、Propsとデフォルト値、既存Themeおよび`TerminalScene`との互換性を検証した。
+
+## Feasibility Assessment
+
+実現可能と判定した。
+
+設計で使用する`AbsoluteFill`、`Easing`、`interpolate`、`Sequence`、`useCurrentFrame`、`useVideoConfig`は、導入済みの`remotion@4.0.484`で利用可能である。
+
+表示文字数、表示行、スクロール位置、登場・退出値を、正規化済みProps、Composition設定、絶対フレームのみから導出する構成は、任意フレームの直接レンダーでも決定論性を維持できる。タイマー、乱数、DOM計測、外部I/O、Reactの可変stateは不要である。
+
+duration 0ではSequenceを生成せず、duration 1では補間を行わず終端値を返すため、補間範囲の境界条件も処理できる。
+
+## Performance Concerns
+
+Timeline構築、文字分割、折り返し、行開始フレーム、スクロール遷移をProps変更時に`useMemo()`で前処理し、フレームごとの処理を区分探索、定数回の補間、表示対象行の抽出に限定する方針は妥当である。
+
+大量行では、スクロール補間の開始offsetと目標offsetの両viewportを覆い、上下1行をoverscanするwindowingが設計されている。表示済み全行をDOM化せず、補間中に必要な行を維持しながら同時DOM行数をviewport周辺へ限定できる。
+
+1920×1080、30fpsでの実レンダーベンチマークは未実施であり、実際のレンダー速度は未確認である。
+
+## Type Design Review
+
+型設計は妥当である。
+
+- `ConsoleEvent`は`type`を判別子とするdiscriminated unionである。
+- 出力種別、配置、Variantは文字列unionで許可値が限定されている。
+- イベント、設定、配列は`Readonly`または`readonly`で定義されている。
+- 解決済みThemeは全出力種別の色を要求し、Theme overrideのみ部分指定を許可している。
+- 設計された公開型に`any`はない。
+
+有限値、整数、正数、イベントIDの一意性はTypeScriptのみでは保証できないため、runtime検証が必要である。
+
+`Array.from()`による文字分割はUnicode code point単位であり、結合文字やZWJ emojiを途中で分割する可能性がある。
+
+## Props Review
+
+`events`のみを必須とし、その他へデフォルト値を設定する区分は妥当である。
+
+イベント固有の`prompt`は共通`prompt`より優先し、output固有の`color`は`kind`に対応するTheme色より優先するため、上書き規則も明確である。
+
+`playbackRate`の適用対象は文字間隔、行間隔、command後待機に限定され、登場、保持、退出、明示`startFrame`には適用されない。内容速度を独立して調整できる。
+
+登場・退出の無効化、duration 0および1、`autoScroll=false`、スクロールアニメーション無効、空イベント、退出無効時の境界条件が定義されている。
+
+## Compatibility
+
+既存Themeと`ConsoleThemeOverrides`は直接同一形式ではないが、adapterで接続できる。
+
+既存Themeの`colors.surface`、`colors.text`、`colors.terminalPrompt`、`colors.border`、`fonts.body`は、`projectThemeToConsoleTheme()`でConsole Themeへ変換される。不足項目は`defaultConsoleTheme`で補完できる。
+
+既存`TerminalScene`の`command`と任意の`output`は、`terminalSceneToConsoleEvents()`で`readonly ConsoleEvent[]`へ変換できる。既存scene型を変更せずadapter境界で接続できるため、ThemeおよびProps形式の非互換は確認されなかった。
+
+## Risks
+
+- 実レンダー性能が未計測である。
+  - 対策: 通常データと10,000表示行データでレンダー時間と最大同時DOM行数を測定する。
+- スクロール補間中に次の行が追加されると位置が跳ぶ可能性がある。
+  - 対策: 境界フレームの補間値を次区間の開始offsetとして前処理する。
+- Unicode結合文字が入力途中や折り返し位置で分割される可能性がある。
+  - 対策: READMEへ制約を記載し、必要に応じて決定論的なgrapheme単位分割へ拡張する。
+- CSS色とshadowの構文は文字列型では保証できない。
+  - 対策: ブラウザのCSS解釈へ委ねる制約を文書化する。
+
+## Recommendations
+
+- duration 0、1、12の登場・退出境界をテストする。
+- `autoScroll=false`、スクロールアニメーション無効、duration 0をテストする。
+- 補間中に次の行が追加されるケースをテストする。
+- 同一Props、Composition設定、フレームの複数回描画結果が一致することを確認する。
+- 重複IDおよび不正な数値入力のruntime検証を確認する。
+- 1920×1080、30fpsで通常データと10,000表示行データを実レンダーし、性能値を記録する。
+
+## Status
+
+STEP_COMPLETE
+
+## 判定基準
+
+| # | 状況 | タグ |
+|---|------|------|
+| 1 | STEP_COMPLETE | `[VALIDATE_DESIGN:1]` |
+| 2 | STEP_BLOCKED | `[VALIDATE_DESIGN:2]` |
+
+
+
+## タスク
+
+上記の判定基準に照らしてレポートを評価してください。合致するルール番号（1始まりの整数）と簡潔な理由を返してください。
+
+
+
+```

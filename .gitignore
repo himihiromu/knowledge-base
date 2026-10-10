@@ -8,6 +8,7 @@
 !/99-trash/README.md
 .env.*
 !.env.example
+/.takt/
 
 __pycache__/
 *.py[codz]

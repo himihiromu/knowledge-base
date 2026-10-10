@@ -38,8 +38,8 @@ function writeJsonl(dir, relativePath, records) {
   return path;
 }
 
-function runCli(args) {
-  return spawnSync(process.execPath, [SCRIPT_PATH, ...args], { encoding: 'utf8' });
+function runCli(args, { perPrompt = true } = {}) {
+  return spawnSync(process.execPath, [SCRIPT_PATH, ...(perPrompt ? ['--per-prompt'] : []), ...args], { encoding: 'utf8' });
 }
 
 function outputEntries(stdout) {
@@ -132,14 +132,33 @@ function snapshotFiles(root) {
   return files;
 }
 
-test('claudeとcodexの両方からユーザー入力のプロンプトを逐語と出典付きで抽出する', (t) => {
+test('既定ではclaudeとcodexの可視会話をセッション単位にまとめる', (t) => {
   const root = newTempRoot(t);
   const { claudeDir, codexDir, claudeFile, codexFile } = writeMainFixture(root);
-  const result = runCli(['--claude-dir', claudeDir, '--codex-dir', codexDir]);
+  const result = runCli(['--claude-dir', claudeDir, '--codex-dir', codexDir], { perPrompt: false });
 
   assert.equal(result.status, 0);
   assert.equal(result.stderr, '');
-  assert.deepEqual(outputEntries(result.stdout), mainExpectedEntries(claudeFile, codexFile));
+  assert.deepEqual(outputEntries(result.stdout), [
+    {
+      source: 'claude', session_id: 'claude-session-0001', messages: [
+        { role: 'user', timestamp: CLAUDE_TS, text: 'まず既存コードを読む', source_file: claudeFile, record_line: 2 },
+        { role: 'assistant', timestamp: CLAUDE_TS, text: '確認しました', source_file: claudeFile, record_line: 3 },
+      ],
+    },
+    {
+      source: 'claude', session_id: 'claude-session-0002', messages: [
+        { role: 'user', timestamp: '2026-09-29T11:00:00.000Z', text: '1行目: 命名は既存に合わせる\n```bash\necho サンプル\n```\n2つ目のブロック', source_file: claudeFile, record_line: 6 },
+        { role: 'user', timestamp: null, text: 'タイムスタンプの無い入力', source_file: claudeFile, record_line: 7 },
+      ],
+    },
+    {
+      source: 'codex', session_id: 'codex-session-0001', messages: [
+        { role: 'user', timestamp: '2026-09-29T09:00:10.000Z', text: '命名は既存に合わせる\n根拠: 既存の命名規約\nテストは観測点を固定する', source_file: codexFile, record_line: 2 },
+        { role: 'assistant', timestamp: '2026-09-29T09:00:20.000Z', text: '既存に合わせます', source_file: codexFile, record_line: 3 },
+      ],
+    },
+  ]);
 });
 
 test('codexのメタ行が無いファイルではsession_idがnullになる', (t) => {
