@@ -20,7 +20,11 @@ test('README documents the standard full-suite command and every individual test
   const individualCommandsAndPaths = [...individualCommands.matchAll(/^(node --test|bash)[ \t]+(scripts\/[^\s`]+)$/gm)]
     .map(([, command, testPath]) => ({ command, testPath }));
 
-  assert.equal(individualCommandsAndPaths.length, 7, 'README must document all seven individual test commands');
+  assert.deepEqual(
+    individualCommandsAndPaths.map(({ testPath }) => testPath).sort(),
+    conventionTestFiles.map((file) => `scripts/test/${file}`).sort(),
+    'README must document each existing test command once, with no removed test paths',
+  );
   for (const { command, testPath } of individualCommandsAndPaths) {
     assert.match(testPath, /^scripts\/test\/[^/]+\.test\.(?:mjs|sh)$/, `README path must use the test directory and filename convention: ${testPath}`);
     assert.equal(

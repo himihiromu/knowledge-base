@@ -45,8 +45,7 @@
               run_suite "fetch-ai-prompts.test.mjs" node --test scripts/test/fetch-ai-prompts.test.mjs
               run_suite "filter-related-knowledge.test.mjs" node --test scripts/test/filter-related-knowledge.test.mjs
               run_suite "test-conventions.test.mjs" node --test scripts/test/test-conventions.test.mjs
-              run_suite "register-ai-prompt.test.sh" bash scripts/test/register-ai-prompt.test.sh
-              run_suite "save-ai-prompt.test.sh" bash scripts/test/save-ai-prompt.test.sh
+              run_suite "register-ai-prompt-session.test.mjs" node --test scripts/test/register-ai-prompt-session.test.mjs
 
               exit "$failed"
             '';
@@ -74,8 +73,7 @@
               fetch-ai-prompts.test.mjs \
               filter-related-knowledge.test.mjs \
               test-conventions.test.mjs \
-              register-ai-prompt.test.sh \
-              save-ai-prompt.test.sh; do
+              register-ai-prompt-session.test.mjs; do
               grep -q "PASS $suite" "$TMPDIR/failure-case.log"
             done
             touch "$out"

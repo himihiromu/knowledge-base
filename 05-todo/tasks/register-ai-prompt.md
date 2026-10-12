@@ -2,7 +2,7 @@
 
 - 状態: 完了
 - 完了日: 2026-10-03
-- 確認日: 2026-10-10
+- 確認日: 2026-10-12
 - 出典: 2026-10-01のユーザー発言。Claude・Codexから取得したプロンプトをこのリポジトリへ格納する依頼。
 
 ## 目的
@@ -23,8 +23,9 @@
 
 ## 成果物・検証結果
 
-- 成果物: [register-ai-prompt.sh](../../scripts/register-ai-prompt.sh)、[register-ai-prompt-session.mjs](../../scripts/register-ai-prompt-session.mjs)、[スクリプト説明](../../scripts/README.md)
+- 成果物: [register-ai-prompt-session.mjs](../../scripts/register-ai-prompt-session.mjs)、[セッション登録テスト](../../scripts/test/register-ai-prompt-session.test.mjs)、[スクリプト説明](../../scripts/README.md)。
 - 検証: 2026-10-04時点のmainに実装・テストがあり、後続のatomic化も反映済み。
+- 移行: 2026-10-12のユーザー依頼により旧 `register-ai-prompt.sh` と専用テストを廃止。現行のセッションJSON入力へ統一し、原文保持・再登録・並列・失敗時の検査をNode.jsテストへ移した。
 
 ## 関連タスク・資料
 
