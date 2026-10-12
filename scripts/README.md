@@ -49,6 +49,8 @@ bash scripts/test/save-ai-prompt.test.sh
 
 ## save-ai-prompt.sh — AIとのプロンプトの保存
 
+この節は旧形式の保存処理を説明する。04に抽出した方針を含め、02の追記先も固定するため、現在の会話原文アーカイブの運用には使わない。会話収集には `register-ai-prompt-session.mjs`、保存済み会話の知識化には[プロンプト知識化スキル](../agents/skills/prompt-knowledge/SKILL.md)を使う。以下は既存スクリプトの挙動の記録である。
+
 ### 目的と役割分担
 
 AI作業への指摘（プロンプト原文）を1件1ファイルで `04-materials/prompts/` へ記録し、そこから抜き出した好み・方針を `02-knowledge/ai-work-preferences.md` へ出典リンク付きで追記する。
@@ -158,7 +160,7 @@ bash、GNU coreutils（`mktemp`、`mkdir`、`rm`、`sha256sum`、`wc`、`cp`、`
 
 取得したAIプロンプトの原文を出典付きで1件1ファイルでこのリポジトリへ登録する。通常の原文は `04-materials/prompts/`、機密情報は `01-secret/prompts/` へ保存する。方針の抽出と `02-knowledge` への集約は行わない。
 
-- save-ai-prompt.sh との役割分担: save-ai-prompt.sh が指摘から抜き出した方針（`--takeaway`）の記録と `02-knowledge/ai-work-preferences.md` への集約を担うのに対し、このスクリプトは受け取った原文の逐語保存だけを行う。原文から方針を抜き出す場合は、登録後に save-ai-prompt.sh を使う。
+- 旧形式での役割分担: save-ai-prompt.sh が抽出方針の記録と固定ファイルへの集約を担い、このスクリプトは原文の登録を担う。現在のセッション原文の登録は `register-ai-prompt-session.mjs` を使い、保存済み原文からの知識化は[プロンプト知識化スキル](../agents/skills/prompt-knowledge/SKILL.md)で02の既存メモと照合して行う。
 - 再利用している規則: ファイル名のタイトル正規化、`--date` の検証、同じ日付とタイトルの記録との衝突拒否、一時ファイルへ組み立ててから置き換える保存手順は save-ai-prompt.sh と同じ。ヘルパは共有せず、各スクリプト内に同じ規則を持つ。
 - 機密区分（04か01か）の判断は、呼び出し側（人間またはAI）が行い、`--secret` として渡す。スクリプトは本文の機密性を判断しない。
 
