@@ -16,6 +16,7 @@
             coreutils
             diffutils
             findutils
+            git
             gnugrep
             gnused
             nodejs_24

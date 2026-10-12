@@ -32,10 +32,40 @@ function updateSectionState(text, section) {
   section.inSourceSection = SOURCE_SECTION_HEADING.test(text);
 }
 
+// CLIでは差分の文脈に依存せず、ステージ済み本文の行番号から出典の範囲を求める。
+// 下位見出しは出典に含め、同じか上位の見出しで終える。コード例の見出しは無視する。
+function sourceLineNumbers(content) {
+  const sourceLines = new Set();
+  let sourceLevel = null;
+  let fence = null;
+  content.split('\n').forEach((line, index) => {
+    const marker = /^ {0,3}(`{3,}|~{3,})(.*)$/.exec(line);
+    if (fence !== null) {
+      if (marker && marker[1][0] === fence[0] && marker[1].length >= fence.length && marker[2].trim() === '') {
+        fence = null;
+      }
+    } else if (marker) {
+      fence = marker[1];
+    } else {
+      const heading = /^ {0,3}(#{1,6})(?:[ \t]+(.*?)|[ \t]*)$/.exec(line);
+      if (heading) {
+        const level = heading[1].length;
+        const title = (heading[2] ?? '').replace(/[ \t]+#+[ \t]*$/, '').trim();
+        if (sourceLevel !== null && level <= sourceLevel) sourceLevel = null;
+        if (sourceLevel === null && title === '出典') sourceLevel = level;
+      }
+    }
+    if (sourceLevel !== null) sourceLines.add(index + 1);
+  });
+  return sourceLines;
+}
+
 // gitはcore.quotePathの既定動作で非ASCIIのファイル名をC引用形式（二重引用符＋8進エスケープ）で出力する。
 // 引用を復号して実パスに戻してから、quotePath=false環境の出力と同じ後処理を適用する
 function parseAddedFilePath(line) {
-  const path = line.slice(4);
+  // 空白を含むパスではGitが末尾に区切りのタブを付けることがある。
+  // パス自体のタブはC引用内でエスケープされる。
+  const path = line.slice(4).split('\t', 1)[0];
   const value = path.startsWith('"') && path.length >= 2 && path.endsWith('"')
     ? decodeCQuotedPath(path)
     : path;
@@ -53,8 +83,9 @@ function decodeCQuotedPath(quoted) {
   let index = 0;
   while (index < body.length) {
     if (body[index] !== '\\') {
-      bytes.push(body.charCodeAt(index));
-      index += 1;
+      const character = String.fromCodePoint(body.codePointAt(index));
+      bytes.push(...Buffer.from(character, 'utf8'));
+      index += character.length;
       continue;
     }
     index += 1;
@@ -76,13 +107,23 @@ function decodeCQuotedPath(quoted) {
   return Buffer.from(bytes).toString('utf8');
 }
 
-export function analyzeKnowledgeDiff(diffText) {
+// readStagedFileを渡すと本文から所属を判定する。省略時は既存の差分単独APIを維持する。
+export function analyzeKnowledgeDiff(diffText, readStagedFile) {
   const candidates = [];
   let excludedCount = 0;
   let currentFile = null;
   let inHunk = false;
   let nextLine = 0;
   const section = { inSourceSection: false };
+  const sourceLinesByFile = new Map();
+
+  function isSourceLine(file, line) {
+    if (readStagedFile === undefined) return section.inSourceSection;
+    if (!sourceLinesByFile.has(file)) {
+      sourceLinesByFile.set(file, sourceLineNumbers(readStagedFile(file)));
+    }
+    return sourceLinesByFile.get(file).has(line);
+  }
 
   for (const line of diffText.split('\n')) {
     if (line.startsWith('diff --git ')) {
@@ -109,7 +150,7 @@ export function analyzeKnowledgeDiff(diffText) {
         updateSectionState(text, section);
         const category = classifyLine(text);
         if (category === null) continue;
-        if (section.inSourceSection || METADATA_FIELD_LINE.test(text)) {
+        if (METADATA_FIELD_LINE.test(text) || isSourceLine(currentFile, lineNumber)) {
           excludedCount += 1;
           continue;
         }
@@ -143,9 +184,9 @@ export function analyzeKnowledgeDiff(diffText) {
 function buildGitDiffArgs(paths) {
   const pathspecs = [...paths];
   for (const excluded of DEFAULT_EXCLUDED_PATHS) {
-    pathspecs.push(`:(exclude)${excluded}`);
+    pathspecs.push(`:(top,exclude)${excluded}`);
   }
-  const args = ['diff', '--cached'];
+  const args = ['diff', '--cached', '--no-ext-diff', '--no-textconv', '--no-color', '--no-relative', '--src-prefix=a/', '--dst-prefix=b/'];
   if (pathspecs.length > 0) args.push('--', ...pathspecs);
   return args;
 }
@@ -167,16 +208,29 @@ function diagnosticLines(stderr) {
 }
 
 function runCli() {
-  const gitResult = spawnSync('git', buildGitDiffArgs(process.argv.slice(2)), { encoding: 'utf8' });
+  const gitOptions = { encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 };
+  const gitResult = spawnSync('git', buildGitDiffArgs(process.argv.slice(2)), gitOptions);
   if (gitResult.error !== undefined || gitResult.status !== 0) {
     const detail = gitResult.error !== undefined ? gitResult.error.message : diagnosticLines(gitResult.stderr);
     process.stderr.write(`git diff --cached を取得できませんでした。gitリポジトリ内で実行してください。\n${detail}\n`);
     process.exitCode = 2;
     return;
   }
-  const result = analyzeKnowledgeDiff(gitResult.stdout);
-  printResult(result);
-  if (result.candidates.length > 0) process.exitCode = 1;
+  try {
+    const result = analyzeKnowledgeDiff(gitResult.stdout, (file) => {
+      const staged = spawnSync('git', ['show', `:${file}`], gitOptions);
+      if (staged.error !== undefined || staged.status !== 0) {
+        const detail = staged.error?.message ?? diagnosticLines(staged.stderr);
+        throw new Error(`ステージ済み本文を取得できませんでした: ${file}\n${detail}`);
+      }
+      return staged.stdout;
+    });
+    printResult(result);
+    if (result.candidates.length > 0) process.exitCode = 1;
+  } catch (error) {
+    process.stderr.write(`${error.message}\n`);
+    process.exitCode = 2;
+  }
 }
 
 const isDirectRun = process.argv[1] !== undefined
