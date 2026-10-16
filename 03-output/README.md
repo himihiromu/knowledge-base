@@ -7,3 +7,4 @@
 ## レポート
 
 - [Knowledge Base ヘルスチェック設計・小規模試行](knowledge-base-health-check-review.md)
+- [ナレッジの鮮度・失効・再検証の提案と現行データ試行](knowledge-freshness-review.md)
