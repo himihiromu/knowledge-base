@@ -202,3 +202,14 @@ node scripts/register-ai-prompt-session.mjs --batch --file /tmp/ai-conversations
   - 必須メタデータ不足（違反）: `02-knowledge/` の内容メモに、確認日（実在する `YYYY-MM-DD`）と空でない行を含む出典セクションを必須とする。`03-output`・`04-materials` の既存形式（作成日・記録日など）は対象外。
   - Markdown・リンクのlint（違反）: 閉じていないコードフェンス（```と~~~を対にして判定）と空の参照先 `]()`。リンク切れ検査との二重報告はしない。
   - 共通: フェンス内とインラインコードスパン内の記述は見出し・メタデータ・リンクとして扱わない。
+
+## report-knowledge-health.mjs — 非ブロッキングな振り返り集計
+
+- 実行: リポジトリルートで `node scripts/report-knowledge-health.mjs`。Node.js と Git のみを使う。CIジョブには追加しない。
+- 入力: `git ls-files -z` の追跡パスと作業ツリー本文。未追跡ファイルは含まれず、HEADと本文が一致する保証はないため、実行時に `git status --short` も確認する。
+- 安全境界: 01・06・99・`.takt/`・`04-materials/prompts/` および非Markdownは本文を読む前に除外し、存在判定用のパスと空本文だけを既存 `analyzeKnowledgeQuality` に渡す。読み取り対象のシンボリックリンクは親ディレクトリも含め拒否する。
+- 出力: 時刻、HEAD、層別の追跡Markdown数・内容メモ数、既存検査の違反/候補カテゴリ別出力件数、外部URL出現数。本文・URL・候補理由・除外パス一覧は出さない。内容メモはREADMEとinbox/promptsを除く。件数は品質の合否に使わない。
+- 終了コード: 集計成功は違反・候補の有無によらず0、入力取得等の失敗は2（未計測）。失敗を0件に変換しない。ファイル・ステージを変更しない。
+- 判定ロジックは品質検査の公開関数を再利用する。既存品質CLIは除外本文も読み込んでから解析時に除外するため、この用途では直接実行しない。
+- 検証: `node --test scripts/test/report-knowledge-health.test.mjs`。除外本文を取得しないこと、リンク存在判定、集計にURLが混入しないことを架空データで確認する。
+- 指標の解釈と未計測項目は[試行レポート](../03-output/knowledge-base-health-check-review.md)を参照する。
