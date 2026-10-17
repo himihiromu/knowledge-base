@@ -30,12 +30,13 @@ node --test scripts/test/check-knowledge-quality.test.mjs
 node --test scripts/test/fetch-ai-prompts.test.mjs
 node --test scripts/test/filter-related-knowledge.test.mjs
 node --test scripts/test/register-ai-prompt-session.test.mjs
+node --test scripts/test/report-knowledge-health.test.mjs
 node --test scripts/test/test-conventions.test.mjs
 ```
 
 ### CI とローカル専用検査
 
-`.github/workflows/knowledge-quality.yml` は Node.js 24 をセットアップし、`node scripts/check-knowledge-quality.mjs` と `node --test 'scripts/test/*.test.mjs'` を実行する。Nix の全テスト入口はローカル実行であり、この workflow では実行しない。現在の全テストはNode.jsの6スイートである。CI の対象はこの文書ではなく workflow の定義が正本である。
+`.github/workflows/knowledge-quality.yml` は Node.js 24 をセットアップし、`node scripts/check-knowledge-quality.mjs` と `node --test 'scripts/test/*.test.mjs'` を実行する。Nix の全テスト入口はローカル実行であり、この workflow では実行しない。現在の全テストはNode.jsの7スイートである。CI の対象はこの文書ではなく workflow の定義が正本である。
 
 構造検査、リンク検査、形式変換など、機械的に実施したほうがよいタスクのコードを置く。
 スクリプトを追加するときは、目的・実行方法・依存ツール・変更対象をここに記録する。
