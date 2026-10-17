@@ -15,6 +15,8 @@
 
 ### このリポジトリの成果物・検証ルール
 
+- [ ] [Taktタスク登録前の確認手順を整備する](tasks/takt-task-preparation.md)
+
 - [ ] [タスク成果物の配置・構造ルールを整備する](tasks/artifact-structure-rules.md)
 - [ ] [テストの配置・命名・一括実行方法を統一する](tasks/test-conventions.md)
 - [ ] [スキル評価をエージェントで自動実行する](tasks/skill-evaluation-runner.md)

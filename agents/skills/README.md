@@ -13,3 +13,5 @@ AIが参照する作業手順を置く。作業ごとにフォルダを作り、
 - [スキル評価](skill-evaluation/SKILL.md): 同じ入力と評価基準でスキル成果を人が採点し、結果を記録・比較する。
 - [AIプロンプトの収集と傾向分析](prompt-trend-analysis/SKILL.md): Claude/Codexのセッション収集、04への記録、反復する指摘・判断基準の分析。
 - [保存済みプロンプトの知識化](prompt-knowledge/SKILL.md): 04の原文を参照し、反復の根拠と02の既存メモを確認して知識の追加・更新・見送りを判断する。
+
+- [Taktタスクの登録前確認](takt-task-preparation/SKILL.md): 入力資料・開始ブランチ・実行条件を揃え、登録時と実行後の確認、Draft PRでの確認と修正の流れを定める。
